@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/structured_clinical_assessment_tool_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+medical:
+  encryption:
+    aes-key: ${MEDICAL_ENCRYPTION_AES_KEY:}
+
+qwen:
+  api-key: ${QWEN_API_KEY:}
+  api-url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation}
+  model: ${QWEN_MODEL:qwen-turbo}
+  timeout: ${QWEN_TIMEOUT:30000}
+

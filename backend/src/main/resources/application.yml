@@ -1,0 +1,86 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  profiles:
+    active: dev
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.medical.assessment.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Sa-Token配置（accessToken 短期有效，配合 refreshToken 使用）
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  # accessToken 有效期 2 小时（7200 秒），刷新由 refreshToken 负责
+  timeout: 7200
+  activity-timeout: -1
+  # 是否允许同一账号并发登录 (为true时允许一起登录, 为false时新登录挤掉旧登录)
+  is-concurrent: true
+  # 在多人登录同一账号时，是否共用一个token (为true时所有登录共用一个token, 为false时每次登录新建一个token)
+  is-share: false
+  # token风格
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: false
+  # 是否从header中读取token
+  is-read-head: true
+  # 是否从cookie中读取token
+  is-read-cookie: false
+  # 是否从请求体参数中读取token
+  is-read-body: false
+
+# refreshToken 存于 httpOnly Cookie，有效期 7 天（秒）
+auth:
+  refresh-token:
+    cookie-name: refreshToken
+    max-age-seconds: 604800
+
+# 登录安全：限流与验证码（可选，不配则使用默认值）
+# login:
+#   security:
+#     rate-limit-window-ms: 60000    # 限流时间窗口（毫秒），默认 1 分钟
+#     rate-limit-max: 10             # 窗口内同一 IP 最多请求次数
+
+# 文件上传配置
+file:
+  upload-path: D:/uploads/
+  max-size: 10485760 # 10MB
+
+# L3 敏感字段加密配置（AES-128，密钥需 16 字节）
+# 建议通过环境变量 MEDICAL_ENCRYPTION_AES_KEY 或配置中心设置
+# 仓库中的默认值仅用于本地演示，生产环境务必替换
+medical:
+  encryption:
+    aes-key: ${MEDICAL_ENCRYPTION_AES_KEY:DemoAesKey123456}
+
+# Qwen API配置
+qwen:
+  api-key: ${QWEN_API_KEY:}
+  api-url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation}
+  model: qwen-turbo  # 可选: qwen-turbo, qwen-plus, qwen-max
+  timeout: 30000  # 超时时间（毫秒）
