@@ -209,6 +209,7 @@ bed/
 - Node.js 16+
 - npm 8+
 - MySQL 8.x
+- Redis 6+（Refresh Token 与 Sa-Token 持久化）
 
 前后端默认端口：
 
@@ -260,7 +261,11 @@ spring:
 - `all.sql` 已按当前后端实体字段整理为纯建表脚本，适合首次空库部署。
 - `db/migration/` 中的文件属于历史增量变更记录，不需要和 `all.sql` 重复执行。
 
-### 3. 启动后端
+### 3. 启动 Redis
+
+确保 Redis 已启动（默认 `localhost:6379`，无密码）。可通过环境变量 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` 覆盖。
+
+### 4. 启动后端
 
 进入后端目录并启动：
 
@@ -283,7 +288,7 @@ java -jar target/zhian-clinical-assessment-system-1.0.0.jar
 http://localhost:8080/api
 ```
 
-### 4. 启动前端
+### 5. 启动前端
 
 进入前端目录安装依赖并运行：
 
@@ -343,9 +348,7 @@ spring:
 
 说明：
 
-- 当前 `RefreshToken` 为内存存储，适合单机开发环境
-- 服务重启后 Refresh Token 会失效
-- 生产环境建议替换为 Redis 等持久化方案
+- Refresh Token 已迁移至 Redis 存储，支持多实例部署、重启不失效
 
 #### 4. 文件上传
 
@@ -610,7 +613,6 @@ mvn clean package -DskipTests
 
 ## 后续可扩展方向
 
-- 将 Refresh Token 存储迁移到 Redis
 - 增加 Docker / Docker Compose 部署方案
 - 补充自动化测试与接口文档
 - 引入 Flyway 或 Liquibase 管理数据库迁移

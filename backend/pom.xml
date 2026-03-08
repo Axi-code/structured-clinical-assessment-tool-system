@@ -76,6 +76,12 @@
             <version>${druid.version}</version>
         </dependency>
 
+        <!-- Redis（RefreshToken 存储、Sa-Token 持久化） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Sa-Token -->
         <dependency>
             <groupId>cn.dev33</groupId>
