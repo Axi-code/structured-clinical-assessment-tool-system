@@ -1,6 +1,8 @@
 package com.medical.assessment.exception;
 
 import com.medical.assessment.common.Result;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -11,9 +13,11 @@ import javax.validation.ConstraintViolationException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(BusinessException.class)
     public Result<Void> handleBusinessException(BusinessException ex) {
+        log.warn("业务异常: {}", ex.getMessage());
         return Result.error(ex.getCode(), ex.getMessage());
     }
 
@@ -36,6 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception ex) {
+        log.error("未处理异常", ex);
         return Result.error("服务器内部错误");
     }
 }

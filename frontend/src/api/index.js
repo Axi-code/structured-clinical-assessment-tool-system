@@ -25,6 +25,7 @@ export const patientApi = {
   addPatient: (data) => request.post('/patient/add', data),
   updatePatient: (data) => request.put('/patient/update', data),
   updateDiagnosis: (id, diagnosisId) => request.put(`/patient/${id}/diagnosis`, { diagnosisId }),
+  adoptLatestAiDiagnosis: (id) => request.post(`/patient/${id}/diagnosis/adopt-ai`),
   deletePatient: (id) => request.delete(`/patient/delete/${id}`)
 }
 

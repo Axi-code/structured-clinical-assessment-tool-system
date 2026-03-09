@@ -205,7 +205,25 @@ public class AssessmentRecordServiceImpl extends ServiceImpl<AssessmentRecordMap
         wrapper.eq(AssessmentRecord::getDeleted, 0);
         wrapper.eq(AssessmentRecord::getStatus, 1); // 只查询已完成的记录
         wrapper.orderByDesc(AssessmentRecord::getCreateTime);
-        return list(wrapper);
+        List<AssessmentRecord> records = list(wrapper);
+        records.forEach(this::hydrateAiDiagnosisName);
+        return records;
+    }
+
+    @Override
+    public AssessmentRecord getLatestCompletedRecord(Long patientId) {
+        if (patientId == null) {
+            return null;
+        }
+        LambdaQueryWrapper<AssessmentRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AssessmentRecord::getPatientId, patientId);
+        wrapper.eq(AssessmentRecord::getDeleted, 0);
+        wrapper.eq(AssessmentRecord::getStatus, 1);
+        wrapper.orderByDesc(AssessmentRecord::getCreateTime);
+        wrapper.last("limit 1");
+        AssessmentRecord record = getOne(wrapper, false);
+        hydrateAiDiagnosisName(record);
+        return record;
     }
     
     @Override
@@ -290,6 +308,11 @@ public class AssessmentRecordServiceImpl extends ServiceImpl<AssessmentRecordMap
         if (result.containsKey("assessmentResult") && result.get("assessmentResult") != null) {
             record.setAssessmentResult(result.get("assessmentResult").toString());
         }
+        if (result.containsKey("diagnosisName") && result.get("diagnosisName") != null) {
+            String aiDiagnosisName = result.get("diagnosisName").toString();
+            record.setAiDiagnosisName(aiDiagnosisName);
+            record.setRemark(upsertAiDiagnosisRemark(record.getRemark(), aiDiagnosisName));
+        }
         if (result.containsKey("riskLevel") && result.get("riskLevel") != null) {
             record.setRiskLevel(result.get("riskLevel").toString());
         }
@@ -315,6 +338,46 @@ public class AssessmentRecordServiceImpl extends ServiceImpl<AssessmentRecordMap
                 }
             }
         }
+
+        if (record.getStatus() != null && record.getStatus() == 1 && record.getPatientId() != null) {
+            patientService.autoApplyDiagnosisByName(record.getPatientId(), record.getAiDiagnosisName());
+        }
+    }
+
+    private void hydrateAiDiagnosisName(AssessmentRecord record) {
+        if (record == null) {
+            return;
+        }
+        record.setAiDiagnosisName(extractAiDiagnosisName(record.getRemark()));
+    }
+
+    private String extractAiDiagnosisName(String remark) {
+        if (remark == null || remark.trim().isEmpty()) {
+            return null;
+        }
+        String[] lines = remark.split("\\r?\\n");
+        for (String line : lines) {
+            if (line != null && line.startsWith(AssessmentRecord.AI_DIAGNOSIS_REMARK_PREFIX)) {
+                String value = line.substring(AssessmentRecord.AI_DIAGNOSIS_REMARK_PREFIX.length()).trim();
+                return value.isEmpty() ? null : value;
+            }
+        }
+        return null;
+    }
+
+    private String upsertAiDiagnosisRemark(String remark, String aiDiagnosisName) {
+        if (aiDiagnosisName == null || aiDiagnosisName.trim().isEmpty()) {
+            return remark;
+        }
+        String aiRemark = AssessmentRecord.AI_DIAGNOSIS_REMARK_PREFIX + aiDiagnosisName.trim();
+        if (remark == null || remark.trim().isEmpty()) {
+            return aiRemark;
+        }
+        List<String> lines = Arrays.stream(remark.split("\\r?\\n"))
+                .filter(line -> line != null && !line.startsWith(AssessmentRecord.AI_DIAGNOSIS_REMARK_PREFIX))
+                .collect(Collectors.toList());
+        lines.add(0, aiRemark);
+        return String.join("\n", lines);
     }
 
 }

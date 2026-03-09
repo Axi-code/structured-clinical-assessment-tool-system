@@ -5,6 +5,7 @@ import com.medical.assessment.dto.PatientCreateDTO;
 import com.medical.assessment.dto.PatientDetailVO;
 import com.medical.assessment.dto.PatientUpdateDTO;
 import com.medical.assessment.dto.PatientVO;
+import com.medical.assessment.entity.Diagnosis;
 import com.medical.assessment.entity.Patient;
 
 import java.util.List;
@@ -22,6 +23,8 @@ public interface PatientService extends IService<Patient> {
     Patient updatePatient(PatientUpdateDTO updateDTO);
     /** 确认或修改患者当前诊断 */
     Patient updatePatientDiagnosis(Long patientId, Long diagnosisId);
+    /** 根据 AI 诊断名称自动匹配并回填患者当前诊断 */
+    Diagnosis autoApplyDiagnosisByName(Long patientId, String diagnosisName);
     /** 获取脱敏后的患者详情 */
     PatientVO getPatientVO(Long id);
     /** 获取用于编辑的患者详情 */

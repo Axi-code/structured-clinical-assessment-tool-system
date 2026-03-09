@@ -42,6 +42,11 @@ public interface AssessmentRecordService extends IService<AssessmentRecord> {
      * 获取患者的历史评估记录
      */
     List<AssessmentRecord> getPatientHistory(Long patientId);
+
+    /**
+     * 获取患者最近一次已完成的评估记录
+     */
+    AssessmentRecord getLatestCompletedRecord(Long patientId);
     
     /**
      * 获取评估记录对比数据

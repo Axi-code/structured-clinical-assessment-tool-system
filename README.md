@@ -11,6 +11,8 @@
 
 - 支持管理员、医生、护士三类角色的权限控制
 - 支持患者基础信息管理与诊断关联
+- 支持 **AI 评估完成后自动匹配诊断字典并回填患者当前诊断**
+- 支持 **AI 建议诊断未匹配时一键加入诊断字典并同步到患者**
 - 支持评估模板、字段、模板版本的管理
 - 支持评估规则配置、规则测试与实时计算
 - 支持评估草稿保存、提交、历史查询与对比
@@ -63,7 +65,7 @@
 
 - 患者列表分页查询
 - 患者新增、编辑、删除
-- 患者诊断维护
+- 患者诊断维护（支持从诊断字典选择或一键采用 AI 建议）
 - 患者历史评估记录查看
 
 ### 3. 评估模板管理
@@ -107,13 +109,15 @@
 - 指标趋势与指标分布
 - 风险预警
 
-### 8. AI 能力
+### 8. AI 能力与诊断联动
 
 - 对话式评估流程
 - AI 推荐评估模板
 - AI 生成评估模板
 - AI 实时辅助计算
 - AI 诊疗建议生成与重生成
+- **AI 评估完成后自动提取 `diagnosisName`，按科室诊断字典匹配并回填患者当前诊断**
+- **AI 建议诊断未匹配时，高亮提示并支持一键加入诊断字典、同步到患者**
 
 ### 9. 审计与安全
 
@@ -121,6 +125,152 @@
 - Access Token 鉴权
 - Refresh Token 续期
 - 患者敏感字段 AES 加密
+
+## 重要功能截图
+
+| 功能 | 截图 |
+|------|------|
+| 首页看板 — 统计概览 | ![首页看板](docs/images/dashboard.png) |
+| 诊断详情 — 当前诊断、AI 建议、一键加入字典 | ![诊断详情](docs/images/diagnosis-detail.png) |
+| 创建评估 — 表单/对话式评估 | ![创建评估](docs/images/assessment-form.png) |
+| AI 诊疗建议 — 诊疗建议展示与操作 | ![AI诊疗建议](docs/images/ai-suggestion.png) |
+| 数据统计 — 统计看板与风险预警 | ![数据统计](docs/images/statistics.png) |
+
+## 系统架构图
+
+系统采用前后端分离架构，前端通过 REST API 与后端交互，后端连接 MySQL、Redis 及外部 Qwen 大模型服务。
+
+```mermaid
+flowchart TB
+    subgraph 用户端
+        Browser[浏览器]
+    end
+
+    subgraph 前端层["前端 (Vue 3 + Vite)"]
+        Vue[Vue 3 应用]
+        Router[Vue Router]
+        Pinia[Pinia 状态]
+        Element[Element Plus]
+        Vue --> Router
+        Vue --> Pinia
+        Vue --> Element
+    end
+
+    subgraph 后端层["后端 (Spring Boot)"]
+        Controller[Controller 层]
+        Service[Service 层]
+        Mapper[Mapper 层]
+        AOP[AOP 日志/鉴权]
+        Controller --> Service
+        Service --> Mapper
+        AOP -.-> Controller
+    end
+
+    subgraph 数据层["数据与外部服务"]
+        MySQL[(MySQL 8)]
+        Redis[(Redis)]
+        Qwen[Qwen 大模型 API]
+    end
+
+    Browser <-->|HTTP/HTTPS| Vue
+    Vue <-->|REST API /api/*| Controller
+    Mapper <-->|MyBatis-Plus| MySQL
+    Service <-->|Refresh Token / Sa-Token| Redis
+    Service -->|诊疗建议/模板推荐/对话评估| Qwen
+```
+
+### 架构说明
+
+| 层级 | 组件 | 职责 |
+|------|------|------|
+| 用户端 | 浏览器 | 访问前端页面，发起请求 |
+| 前端层 | Vue 3 + Vite + Element Plus | 页面渲染、路由、状态管理、接口调用 |
+| 后端层 | Spring Boot + MyBatis-Plus | REST API、业务逻辑、数据持久化、鉴权与日志 |
+| 数据层 | MySQL | 业务数据存储 |
+| 数据层 | Redis | Refresh Token、Sa-Token 会话持久化 |
+| 数据层 | Qwen API | AI 诊疗建议、对话式评估、模板推荐 |
+
+## 核心工作流程
+
+### 1. 患者评估与诊断确认流程
+
+从患者建档到评估完成、AI 诊断回填及医生确认的完整流程。
+
+```mermaid
+flowchart TD
+    A[患者建档] --> B[选择患者与模板]
+    B --> C{评估模式}
+    C -->|表单模式| D[填写评估表单]
+    C -->|对话模式| E[AI 对话式采集]
+    D --> F[提交评估]
+    E --> F
+    F --> G[规则/AI 计算评估结果]
+    G --> H[AI 产出 diagnosisName]
+    H --> I{诊断字典匹配}
+    I -->|匹配成功| J[自动回填患者当前诊断]
+    I -->|未匹配| K[高亮 AI 建议诊断]
+    J --> L[医生可确认/修正]
+    K --> M[一键加入诊断字典并采用]
+    M --> J
+    L --> N[完成]
+```
+
+### 2. 诊断字典与 AI 联动流程
+
+AI 建议诊断与诊断字典的匹配、回填及一键加入逻辑。
+
+```mermaid
+flowchart LR
+    subgraph 评估完成
+        A1[评估提交] --> A2[AI 计算]
+        A2 --> A3[产出 diagnosisName]
+    end
+
+    subgraph 自动匹配
+        A3 --> B1{科室诊断字典}
+        B1 -->|精确/模糊匹配| B2[匹配成功]
+        B1 -->|无匹配| B3[未匹配]
+        B2 --> B4[更新 patient.diagnosis_id]
+    end
+
+    subgraph 医生操作
+        B3 --> C1[诊断详情页高亮提示]
+        C1 --> C2[点击 加入诊断字典并采用]
+        C2 --> C3[新建诊断字典项]
+        C3 --> B4
+    end
+```
+
+### 3. 登录与会话续期流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant F as 前端
+    participant B as 后端
+    participant R as Redis
+
+    U->>F: 输入账号密码
+    F->>B: POST /user/login
+    B->>B: 校验验证码/限流
+    B->>B: 校验密码
+    B->>R: 存储 Refresh Token
+    B-->>F: Access Token + Set-Cookie
+    F->>F: 存储 Token，跳转首页
+
+    loop 后续请求
+        F->>B: Authorization: Bearer {token}
+        B->>B: 校验 Access Token
+        alt Token 有效
+            B-->>F: 正常响应
+        else Token 过期 401
+            F->>B: POST /user/refresh (带 Cookie)
+            B->>R: 校验 Refresh Token
+            B-->>F: 新 Access Token
+            F->>B: 重试原请求
+        end
+    end
+```
 
 ## 系统角色
 
@@ -450,7 +600,8 @@ Vite 代理配置位于 `frontend/vite.config.js`：
 - `/patient/{id}/edit`
 - `/patient/add`
 - `/patient/update`
-- `/patient/{id}/diagnosis`
+- `/patient/{id}/diagnosis`（确认/修改诊断）
+- `/patient/{id}/diagnosis/adopt-ai`（一键采用 AI 建议诊断并加入字典）
 - `/patient/delete/{id}`
 
 ### 评估模板模块
@@ -610,6 +761,20 @@ mvn clean package -DskipTests
 - 检查当前实体类字段
 - 检查你导入的 SQL 是否为项目当前使用版本
 - 对照 `application-dev.yml` 中的数据源和本地数据库实际内容进行统一
+
+### 5. 更新患者时报 "Data too long for column 'id_card'"
+
+患者敏感字段（身份证、电话等）使用 AES 加密存储，加密后长度会膨胀。若建表时未执行扩容迁移，会出现此错误。请执行：
+
+```sql
+-- 见 backend/src/main/resources/db/migration/V2__patient_l3_encryption_columns.sql
+ALTER TABLE `patient`
+  MODIFY COLUMN `id_card` varchar(100) NULL DEFAULT NULL COMMENT '身份证号（加密存储）',
+  MODIFY COLUMN `phone` varchar(100) NULL DEFAULT NULL COMMENT '联系电话（加密存储）',
+  MODIFY COLUMN `address` varchar(500) NULL DEFAULT NULL COMMENT '地址（加密存储）',
+  MODIFY COLUMN `emergency_contact` varchar(150) NULL DEFAULT NULL COMMENT '紧急联系人（加密存储）',
+  MODIFY COLUMN `emergency_phone` varchar(100) NULL DEFAULT NULL COMMENT '紧急联系电话（加密存储）';
+```
 
 ## 后续可扩展方向
 

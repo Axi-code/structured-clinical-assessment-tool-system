@@ -25,6 +25,24 @@
               <el-tag :type="patient.diagnosisName ? 'success' : 'warning'" size="large">
                 {{ patient.diagnosisName || '未明确' }}
               </el-tag>
+              <el-tag
+                v-if="latestAiDiagnosis"
+                :type="patient.diagnosisName && latestAiDiagnosisMatched ? 'success' : 'info'"
+                size="large"
+                style="margin-left: 10px"
+              >
+                AI建议：{{ latestAiDiagnosis }}
+              </el-tag>
+              <el-button
+                v-if="canConfirmDiagnosis && canAdoptAiDiagnosis"
+                link
+                type="warning"
+                style="margin-left: 10px"
+                :loading="aiDiagnosisAdopting"
+                @click="handleAdoptLatestAiDiagnosis"
+              >
+                加入诊断字典并采用
+              </el-button>
               <el-button 
                 v-if="canConfirmDiagnosis" 
                 link 
@@ -35,6 +53,13 @@
                 {{ diagnosisActionText }}
               </el-button>
               <div class="diagnosis-helper">{{ diagnosisHelperText }}</div>
+              <el-alert
+                v-if="canAdoptAiDiagnosis"
+                class="diagnosis-alert"
+                type="warning"
+                :closable="false"
+                title="最新 AI 建议诊断尚未匹配到当前诊断，可一键加入当前科室的诊断字典并同步到患者信息。"
+              />
             </el-descriptions-item>
             <el-descriptions-item label="备注" :span="3">{{ patient.remark || '-' }}</el-descriptions-item>
           </el-descriptions>
@@ -157,6 +182,13 @@
     <!-- 更新诊断对话框 -->
     <el-dialog v-model="diagnosisVisible" title="确认当前诊断" width="420px">
       <el-form :model="diagnosisForm" label-width="80px">
+        <el-form-item label="AI建议">
+          <el-input
+            :model-value="latestAiDiagnosis || '暂无 AI 建议诊断'"
+            readonly
+            placeholder="暂无 AI 建议诊断"
+          />
+        </el-form-item>
         <el-form-item label="确诊诊断">
           <el-select
             v-model="diagnosisForm.diagnosisId"
@@ -169,10 +201,25 @@
             <el-option v-for="d in diagnosisOptions" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
         </el-form-item>
-        <div class="dialog-tip">患者建档阶段不录入诊断。这里用于医生在评估后确认或修正当前临床诊断。</div>
+        <el-alert
+          v-if="canAdoptAiDiagnosis"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="当前科室诊断字典中暂未匹配到该 AI 建议诊断。"
+        />
+        <div class="dialog-tip">系统会先根据最新 AI 评估结果自动匹配当前诊断；这里仅用于医生确认或修正。</div>
       </el-form>
       <template #footer>
         <el-button @click="diagnosisVisible = false">取消</el-button>
+        <el-button
+          v-if="canAdoptAiDiagnosis"
+          type="warning"
+          @click="handleAdoptLatestAiDiagnosis"
+          :loading="aiDiagnosisAdopting"
+        >
+          加入字典并采用
+        </el-button>
         <el-button type="primary" @click="submitDiagnosis" :loading="diagnosisSubmitting">保存诊断</el-button>
       </template>
     </el-dialog>
@@ -208,6 +255,7 @@ const currentSuggestion = ref(null)
 
 const diagnosisVisible = ref(false)
 const diagnosisSubmitting = ref(false)
+const aiDiagnosisAdopting = ref(false)
 const diagnosisOptions = ref([])
 const diagnosisForm = reactive({
   diagnosisId: null
@@ -222,6 +270,12 @@ const assessmentStats = reactive({
 
 const patientId = computed(() => route.params.id)
 const latestAssessment = computed(() => recentAssessments.value[0] || null)
+const latestAiDiagnosis = computed(() => latestAssessment.value?.aiDiagnosisName || '')
+const latestAiDiagnosisMatched = computed(() => {
+  if (!patient.value?.diagnosisName || !latestAiDiagnosis.value) return false
+  return isDiagnosisNameMatched(patient.value.diagnosisName, latestAiDiagnosis.value)
+})
+const canAdoptAiDiagnosis = computed(() => !!latestAiDiagnosis.value && !latestAiDiagnosisMatched.value && !!patient.value?.departmentId)
 const diagnosisActionText = computed(() => (patient.value?.diagnosisName ? '修改诊断' : '确认诊断'))
 const diagnosisHelperText = computed(() => {
   if (latestAssessment.value) {
@@ -232,13 +286,44 @@ const diagnosisHelperText = computed(() => {
     if (latestAssessment.value.riskLevel) {
       summary.push(`风险等级：${latestAssessment.value.riskLevel}`)
     }
+    if (latestAiDiagnosis.value) {
+      summary.push(`AI建议诊断：${latestAiDiagnosis.value}`)
+    }
     const prefix = summary.length > 0 ? `${summary.join('；')}。` : ''
-    return `${prefix}患者建档时只录入基本信息，诊断应由医生结合评估结果、病史和检查结果确认。`
+    return `${prefix}系统会优先根据最新 AI 结果自动更新当前诊断，医生可结合病史和检查结果确认或修正。`
   }
-  return '患者建档时只录入基本信息，诊断应在完成评估或临床判断后由医生确认。'
+  return '患者建档时只录入基本信息；完成评估后，系统会依据 AI 结果自动匹配诊断，医生可进一步确认。'
 })
 
 const formatTime = (val) => formatDateTime(val) || val || ''
+const normalizeDiagnosisName = (value) => (value || '')
+  .replace(/[\s,，。；;、:：()（）\-_/]+/g, '')
+  .toLowerCase()
+
+const isDiagnosisNameMatched = (left, right) => {
+  const normalizedLeft = normalizeDiagnosisName(left)
+  const normalizedRight = normalizeDiagnosisName(right)
+  if (!normalizedLeft || !normalizedRight) return false
+  return normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+}
+
+const findDiagnosisOptionByAiSuggestion = () => {
+  if (!latestAiDiagnosis.value) return null
+  const normalizedSuggestion = normalizeDiagnosisName(latestAiDiagnosis.value)
+  if (!normalizedSuggestion) return null
+
+  const exactMatch = diagnosisOptions.value.find(option =>
+    normalizeDiagnosisName(option.name) === normalizedSuggestion
+  )
+  if (exactMatch) return exactMatch
+
+  return diagnosisOptions.value.find(option => {
+    const normalizedName = normalizeDiagnosisName(option.name)
+    return normalizedName.includes(normalizedSuggestion) || normalizedSuggestion.includes(normalizedName)
+  }) || null
+}
 
 const fetchPatient = async () => {
   loading.value = true
@@ -309,6 +394,13 @@ const handleCreateAssessment = () => {
     path: '/assessment/create',
     query: { patientId: patientId.value }
   })
+}
+
+const refreshDiagnosisContext = async () => {
+  await Promise.all([
+    fetchPatient(),
+    fetchAssessmentHistory()
+  ])
 }
 
 const handleViewAllHistory = () => {
@@ -398,10 +490,28 @@ const handleUpdateDiagnosis = async () => {
   try {
     const res = await diagnosisApi.listByDepartment(patient.value.departmentId)
     diagnosisOptions.value = res.data || []
-    diagnosisForm.diagnosisId = patient.value.diagnosisId || null
+    const aiMatchedOption = findDiagnosisOptionByAiSuggestion()
+    diagnosisForm.diagnosisId = patient.value.diagnosisId || aiMatchedOption?.id || null
     diagnosisVisible.value = true
   } catch (error) {
     ElMessage.error('获取诊断列表失败')
+  }
+}
+
+const handleAdoptLatestAiDiagnosis = async () => {
+  if (!canAdoptAiDiagnosis.value) return
+  aiDiagnosisAdopting.value = true
+  try {
+    const res = await patientApi.adoptLatestAiDiagnosis(patientId.value)
+    ElMessage.success(res.message || 'AI 诊断已同步')
+    diagnosisVisible.value = false
+    await refreshDiagnosisContext()
+  } catch (error) {
+    if (!error?.message) {
+      ElMessage.error('AI 诊断采用失败')
+    }
+  } finally {
+    aiDiagnosisAdopting.value = false
   }
 }
 
@@ -411,9 +521,11 @@ const submitDiagnosis = async () => {
     await patientApi.updateDiagnosis(patientId.value, diagnosisForm.diagnosisId)
     ElMessage.success('诊断更新成功')
     diagnosisVisible.value = false
-    fetchPatient()
+    await refreshDiagnosisContext()
   } catch (error) {
-    ElMessage.error('诊断更新失败')
+    if (!error?.message) {
+      ElMessage.error('诊断更新失败')
+    }
   } finally {
     diagnosisSubmitting.value = false
   }
@@ -488,6 +600,10 @@ onMounted(() => {
   margin-top: 10px;
   color: #909399;
   line-height: 1.6;
+}
+
+.diagnosis-alert {
+  margin-top: 12px;
 }
 
 .dialog-tip {

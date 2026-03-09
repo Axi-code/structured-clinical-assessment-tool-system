@@ -1,5 +1,6 @@
 package com.medical.assessment.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.medical.assessment.dto.PatientCreateDTO;
 import com.medical.assessment.dto.PatientDetailVO;
@@ -17,7 +18,10 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -85,6 +89,7 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
     public Patient updatePatientDiagnosis(Long patientId, Long diagnosisId) {
         Patient patient = getRequiredPatient(patientId);
         if (diagnosisId == null) {
+            updatePatientDiagnosisField(patientId, null);
             patient.setDiagnosisId(null);
         } else {
             Diagnosis diagnosis = diagnosisService.getById(diagnosisId);
@@ -94,11 +99,33 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
             if (patient.getDepartmentId() == null || !patient.getDepartmentId().equals(diagnosis.getDepartmentId())) {
                 throw new BusinessException("当前诊断必须属于患者所属科室");
             }
+            updatePatientDiagnosisField(patientId, diagnosisId);
             patient.setDiagnosisId(diagnosisId);
         }
         patient.setUpdateTime(LocalDateTime.now());
-        updateById(patient);
         return patient;
+    }
+
+    @Override
+    public Diagnosis autoApplyDiagnosisByName(Long patientId, String diagnosisName) {
+        if (diagnosisName == null || diagnosisName.trim().isEmpty()) {
+            return null;
+        }
+        Patient patient = getRequiredPatient(patientId);
+        if (patient.getDepartmentId() == null) {
+            return null;
+        }
+        List<Diagnosis> diagnoses = diagnosisService.listByDepartmentId(patient.getDepartmentId());
+        Diagnosis matched = matchDiagnosisByName(diagnoses, diagnosisName);
+        if (matched == null) {
+            return null;
+        }
+        if (!Objects.equals(patient.getDiagnosisId(), matched.getId())) {
+            updatePatientDiagnosisField(patientId, matched.getId());
+            patient.setDiagnosisId(matched.getId());
+            patient.setUpdateTime(LocalDateTime.now());
+        }
+        return matched;
     }
 
     @Override
@@ -145,6 +172,54 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
         if (diagnosis == null || !patient.getDepartmentId().equals(diagnosis.getDepartmentId())) {
             patient.setDiagnosisId(null);
         }
+    }
+
+    private Diagnosis matchDiagnosisByName(List<Diagnosis> diagnoses, String diagnosisName) {
+        if (diagnoses == null || diagnoses.isEmpty()) {
+            return null;
+        }
+        String normalizedTarget = normalizeDiagnosisName(diagnosisName);
+        if (normalizedTarget.isEmpty()) {
+            return null;
+        }
+
+        for (Diagnosis diagnosis : diagnoses) {
+            if (diagnosis == null || diagnosis.getName() == null) {
+                continue;
+            }
+            if (normalizedTarget.equals(normalizeDiagnosisName(diagnosis.getName()))) {
+                return diagnosis;
+            }
+        }
+
+        return diagnoses.stream()
+                .filter(Objects::nonNull)
+                .filter(diagnosis -> diagnosis.getName() != null)
+                .filter(diagnosis -> {
+                    String normalizedName = normalizeDiagnosisName(diagnosis.getName());
+                    return normalizedName.contains(normalizedTarget) || normalizedTarget.contains(normalizedName);
+                })
+                .min(Comparator.comparingInt(diagnosis ->
+                        Math.abs(normalizeDiagnosisName(diagnosis.getName()).length() - normalizedTarget.length())))
+                .orElse(null);
+    }
+
+    private String normalizeDiagnosisName(String diagnosisName) {
+        if (diagnosisName == null) {
+            return "";
+        }
+        return diagnosisName
+                .replaceAll("[\\s,，。；;、:：()（）\\-_/]+", "")
+                .toLowerCase(Locale.ROOT)
+                .trim();
+    }
+
+    private void updatePatientDiagnosisField(Long patientId, Long diagnosisId) {
+        LambdaUpdateWrapper<Patient> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(Patient::getId, patientId)
+                .set(Patient::getDiagnosisId, diagnosisId)
+                .set(Patient::getUpdateTime, LocalDateTime.now());
+        update(updateWrapper);
     }
 }
 

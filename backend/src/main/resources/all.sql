@@ -185,6 +185,7 @@ CREATE TABLE `assessment_record` (
   `assessment_data` text COMMENT '评估数据（JSON格式）',
   `total_score` double DEFAULT NULL COMMENT '总分',
   `assessment_result` varchar(100) DEFAULT NULL COMMENT '评估结果',
+  `ai_diagnosis_name` varchar(100) DEFAULT NULL COMMENT 'AI建议诊断名称',
   `risk_level` varchar(50) DEFAULT NULL COMMENT '风险等级',
   `risk_tips` text COMMENT '风险提示',
   `status` int NOT NULL DEFAULT 0 COMMENT '状态：0-草稿，1-已完成',

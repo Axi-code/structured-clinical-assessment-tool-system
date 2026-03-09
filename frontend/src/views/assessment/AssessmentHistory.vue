@@ -20,6 +20,7 @@
           <el-table-column prop="department" label="科室" width="120" />
           <el-table-column prop="totalScore" label="总分" width="100" />
           <el-table-column prop="assessmentResult" label="评估结果" width="150" />
+          <el-table-column prop="aiDiagnosisName" label="AI建议诊断" width="160" />
           <el-table-column prop="riskLevel" label="风险等级" width="120">
             <template #default="scope">
               <el-tag v-if="scope.row.riskLevel" :type="getRiskTagType(scope.row.riskLevel)">
@@ -67,6 +68,7 @@
           <el-descriptions-item label="科室">{{ currentRecord.department }}</el-descriptions-item>
           <el-descriptions-item label="总分">{{ currentRecord.totalScore }}</el-descriptions-item>
           <el-descriptions-item label="评估结果">{{ currentRecord.assessmentResult }}</el-descriptions-item>
+          <el-descriptions-item label="AI建议诊断">{{ currentRecord.aiDiagnosisName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="风险等级">{{ currentRecord.riskLevel }}</el-descriptions-item>
           <el-descriptions-item label="风险提示" :span="2">{{ currentRecord.riskTips }}</el-descriptions-item>
         </el-descriptions>
