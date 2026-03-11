@@ -129,21 +129,59 @@
 
 ## 重要功能截图
 
-
-| 功能                       | 截图     |
-| ------------------------ | ------ |
-| 首页看板 — 统计概览              | 首页看板   |
-| 诊断详情 — 当前诊断、AI 建议、一键加入字典 | 诊断详情   |
-| 创建评估 — 表单/对话式评估          | 创建评估   |
-| AI 诊疗建议 — 诊疗建议展示与操作      | AI诊疗建议 |
-| 数据统计 — 统计看板与风险预警         | 数据统计   |
+| 功能 | 截图 |
+|------|------|
+| 首页看板 — 统计概览 | ![首页看板](docs/images/dashboard.png) |
+| 诊断详情 — 当前诊断、AI 建议、一键加入字典 | ![诊断详情](docs/images/diagnosis-detail.png) |
+| 创建评估 — 表单/对话式评估 | ![创建评估](docs/images/assessment-form.png) |
+| AI 诊疗建议 — 诊疗建议展示与操作 | ![AI诊疗建议](docs/images/ai-suggestion.png) |
+| 数据统计 — 统计看板与风险预警 | ![数据统计](docs/images/statistics.png) |
 
 
 ## 系统架构图
 
 系统采用前后端分离架构，前端通过 REST API 与后端交互，后端连接 MySQL、Redis 及外部 Qwen 大模型服务。
 
-> 架构图与工作流程图详见 [docs/diagrams.md](docs/diagrams.md)。
+```mermaid
+flowchart TB
+    subgraph 用户端
+        Browser[浏览器]
+    end
+
+    subgraph 前端层["前端 (Vue 3 + Vite)"]
+        Vue[Vue 3 应用]
+        Router[Vue Router]
+        Pinia[Pinia 状态]
+        Element[Element Plus]
+        Vue --> Router
+        Vue --> Pinia
+        Vue --> Element
+    end
+
+    subgraph 后端层["后端 (Spring Boot)"]
+        Controller[Controller 层]
+        Service[Service 层]
+        Mapper[Mapper 层]
+        AOP[AOP 日志/鉴权]
+        Controller --> Service
+        Service --> Mapper
+        AOP -.-> Controller
+    end
+
+    subgraph 数据层["数据与外部服务"]
+        MySQL[(MySQL 8)]
+        Redis[(Redis)]
+        Qwen[Qwen 大模型 API]
+    end
+
+    Browser <-->|HTTP/HTTPS| Vue
+    Vue <-->|REST API /api/*| Controller
+    Mapper <-->|MyBatis-Plus| MySQL
+    Service <-->|Refresh Token / Sa-Token| Redis
+    Service -->|诊疗建议/模板推荐/对话评估| Qwen
+```
+
+> 更多架构图与工作流程图详见 [docs/diagrams.md](docs/diagrams.md)。
 
 ### 架构说明
 
@@ -160,9 +198,87 @@
 
 ## 核心工作流程
 
-系统架构、患者评估与诊断确认、诊断字典与 AI 联动、登录与会话续期等流程图详见 [docs/diagrams.md](docs/diagrams.md)。
+### 1. 患者评估与诊断确认流程
 
-核心数据流图（评估流程、规则引擎、AI 能力、安全机制等 10 张详细图）详见 [docs/core-data-flows.md](docs/core-data-flows.md)。
+从患者建档到评估完成、AI 诊断回填及医生确认的完整流程。
+
+```mermaid
+flowchart TD
+    A[患者建档] --> B[选择患者与模板]
+    B --> C{评估模式}
+    C -->|表单模式| D[填写评估表单]
+    C -->|对话模式| E[AI 对话式采集]
+    D --> F[提交评估]
+    E --> F
+    F --> G[规则/AI 计算评估结果]
+    G --> H[AI 产出 diagnosisName]
+    H --> I{诊断字典匹配}
+    I -->|匹配成功| J[自动回填患者当前诊断]
+    I -->|未匹配| K[高亮 AI 建议诊断]
+    J --> L[医生可确认/修正]
+    K --> M[一键加入诊断字典并采用]
+    M --> J
+    L --> N[完成]
+```
+
+### 2. 诊断字典与 AI 联动流程
+
+AI 建议诊断与诊断字典的匹配、回填及一键加入逻辑。
+
+```mermaid
+flowchart LR
+    subgraph 评估完成
+        A1[评估提交] --> A2[AI 计算]
+        A2 --> A3[产出 diagnosisName]
+    end
+
+    subgraph 自动匹配
+        A3 --> B1{科室诊断字典}
+        B1 -->|精确/模糊匹配| B2[匹配成功]
+        B1 -->|无匹配| B3[未匹配]
+        B2 --> B4[更新 patient.diagnosis_id]
+    end
+
+    subgraph 医生操作
+        B3 --> C1[诊断详情页高亮提示]
+        C1 --> C2[点击 加入诊断字典并采用]
+        C2 --> C3[新建诊断字典项]
+        C3 --> B4
+    end
+```
+
+### 3. 登录与会话续期流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant F as 前端
+    participant B as 后端
+    participant R as Redis
+
+    U->>F: 输入账号密码
+    F->>B: POST /user/login
+    B->>B: 校验验证码/限流
+    B->>B: 校验密码
+    B->>R: 存储 Refresh Token
+    B-->>F: Access Token + Set-Cookie
+    F->>F: 存储 Token，跳转首页
+
+    loop 后续请求
+        F->>B: Authorization: Bearer {token}
+        B->>B: 校验 Access Token
+        alt Token 有效
+            B-->>F: 正常响应
+        else Token 过期 401
+            F->>B: POST /user/refresh (带 Cookie)
+            B->>R: 校验 Refresh Token
+            B-->>F: 新 Access Token
+            F->>B: 重试原请求
+        end
+    end
+```
+
+> 核心数据流图（评估流程、规则引擎、AI 能力、安全机制等 10 张详细图）详见 [docs/core-data-flows.md](docs/core-data-flows.md)。
 
 ## 系统角色
 
