@@ -120,8 +120,8 @@ sequenceDiagram
         U->>F: 自然语言回答（如「睡不好」「无」）
         F->>B: POST /assessment-conversation/reply
         B->>LLM: prompt = 对话历史 + 缺失字段 + 本轮回答
-        LLM-->>B: JSON: mapped_data_delta + assistant_question + completion
-        Note over B: 强制补底：若 LLM 漏提取目标字段，<br/>程序按关键词兜底填入
+        LLM-->>B: JSON: mapped_data_delta + assistant_question + need_clarify + clarify_question + completion
+        Note over B: need_clarify=true 时：不强制补底，用 clarify_question 追问；<br/>否则：强制补底兜底填入
         B->>B: 合并 delta → currentData
         B->>B: 状态机推进 → 找下一个缺失字段
         opt 实时计算
@@ -146,32 +146,38 @@ sequenceDiagram
 
 ## 4. 单轮对话详细处理流程
 
-一轮对话内部的完整处理链：LLM 解析 → 强制补底 → 合并数据 → 状态机推进 → 生成下轮提问。
+一轮对话内部的完整处理链：LLM 解析 → 澄清判断 → 强制补底（或跳过）→ 合并数据 → 状态机推进 → 生成下轮提问。
 
 ```mermaid
 flowchart TD
-    A["患者发送消息\n（如「无」「睡不好」）"]
+    A["患者发送消息\n（如「无」「睡不好」「最近一直不太舒服」）"]
     B["确定当前目标字段\n按模板顺序第一个缺失必填字段"]
     C["调用通义千问\n传入对话历史 + 缺失字段列表 + 本轮回答"]
-    D["LLM 返回 JSON\nmapped_data_delta · assistant_question\nmissing_fields · completion · confidence"]
+    D["LLM 返回 JSON\nmapped_data_delta · assistant_question\nneed_clarify · clarify_question · completion"]
     E{"mapped_data_delta\n包含目标字段?"}
+    CL{"need_clarify=true\n且 clarify_question 非空?"}
     G["合并 delta → currentData"]
     F["强制补底逻辑"]
     F1{"回答长度与关键词"}
     F2["≤10 字：直接赋值"]
     F3["含「无/没有/正常/否」：赋值「无/正常」"]
     F4["其他：用原话赋值"]
+    SK["跳过补底\n保持该字段缺失，等待澄清回答"]
     H["状态机推进\n遍历必填字段 → 第一个仍为空的"]
     I{"所有必填字段已填?"}
-    J{"AI assistant_question\n针对下一字段?"}
+    J{"need_clarify=true?"}
+    J2{"AI assistant_question\n针对下一字段?"}
     K["返回「信息已基本完整」"]
-    L["采用 AI 生成的自然提问"]
+    L["采用 clarify_question 追问\n（如「能具体说是哪里不舒服吗？」）"]
+    L2["采用 AI 生成的自然提问"]
     M["模板生成提问\n如「请问您的食欲是？可选：好/一般/差」"]
-    N["返回前端\nassistantMessage + mappedData + completion"]
+    N["返回前端\nassistantMessage + mappedData + needClarify + completion"]
 
     A --> B --> C --> D --> E
     E -->|是| G
-    E -->|否| F --> F1
+    E -->|否| CL
+    CL -->|是| SK --> G
+    CL -->|否| F --> F1
     F1 -->|≤10 字| F2 --> G
     F1 -->|含否定词| F3 --> G
     F1 -->|其他| F4 --> G
@@ -179,12 +185,16 @@ flowchart TD
     I -->|否| J
     I -->|是| K --> N
     J -->|是| L --> N
-    J -->|否| M --> N
+    J -->|否| J2
+    J2 -->|是| L2 --> N
+    J2 -->|否| M --> N
 
     classDef llm fill:#f3e5f5,stroke:#7b1fa2
+    classDef clarify fill:#fff9c4,stroke:#f9a825
     classDef fallback fill:#fce4ec,stroke:#c62828
     classDef merge fill:#e8f5e9,stroke:#2e7d32
     class C,D llm
+    class CL,L,SK clarify
     class F,F1,F2,F3,F4 fallback
     class G,H merge
 ```

@@ -333,17 +333,26 @@ public class AssessmentConversationController {
                 patient, template, fields, body.getMessages(), currentData, body.getPatientMessage()
         );
         Map<String, Object> mappedDelta = castMap(aiResult.get("mappedDataDelta"));
-        
-        // 强制保障补底：如果AI没有提取出目标字段的值，并且用户的回答很像直接回答
+
+        boolean needClarify = Boolean.TRUE.equals(aiResult.get("needClarify"));
+        String clarifyQuestion = aiResult.get("clarifyQuestion") != null
+                ? String.valueOf(aiResult.get("clarifyQuestion")).trim() : "";
+
+        // 强制补底：LLM 未提取目标字段时
+        // — 若 LLM 判定回答模糊（needClarify=true）且给出了澄清问题，则不强制填入，等待用户回答澄清后再提取
+        // — 否则按原话兜底，避免状态机卡死
         if (currentTarget != null && !mappedDelta.containsKey(currentTarget.getFieldCode())) {
-            String msg = body.getPatientMessage().trim();
-            if (msg.length() <= 10) { // 简短回答直接赋值
-                mappedDelta.put(currentTarget.getFieldCode(), msg);
-            } else if (msg.contains("无") || msg.contains("没有") || msg.contains("正常") || msg.contains("否")) {
-                mappedDelta.put(currentTarget.getFieldCode(), "无/正常");
+            if (needClarify && !clarifyQuestion.isEmpty()) {
+                // 回答模糊，暂不填入，保持该字段缺失，下轮继续采集
             } else {
-                // 如果还是很长，直接把原话填进去，强制推进状态机
-                mappedDelta.put(currentTarget.getFieldCode(), msg);
+                String msg = body.getPatientMessage().trim();
+                if (msg.length() <= 10) {
+                    mappedDelta.put(currentTarget.getFieldCode(), msg);
+                } else if (msg.contains("无") || msg.contains("没有") || msg.contains("正常") || msg.contains("否")) {
+                    mappedDelta.put(currentTarget.getFieldCode(), "无/正常");
+                } else {
+                    mappedDelta.put(currentTarget.getFieldCode(), msg);
+                }
             }
         }
 
@@ -354,7 +363,9 @@ public class AssessmentConversationController {
                 String.valueOf(aiResult.get("assistantMessage")),
                 body.getMessages(),
                 fields,
-                currentData
+                currentData,
+                needClarify,
+                clarifyQuestion
         );
 
         Map<String, Object> resp = new HashMap<>();
@@ -364,8 +375,8 @@ public class AssessmentConversationController {
         resp.put("missingFields", missingFields);
         resp.put("completion", completion);
         resp.put("confidence", aiResult.get("confidence"));
-        resp.put("needClarify", aiResult.get("needClarify"));
-        resp.put("clarifyQuestion", aiResult.get("clarifyQuestion"));
+        resp.put("needClarify", needClarify);
+        resp.put("clarifyQuestion", clarifyQuestion);
         return Result.success(resp);
     }
 
@@ -713,6 +724,17 @@ public class AssessmentConversationController {
 
     private String resolveAssistantQuestion(String aiQuestion, List<Map<String, String>> history,
                                             List<AssessmentField> fields, Map<String, Object> currentData) {
+        return resolveAssistantQuestion(aiQuestion, history, fields, currentData, false, "");
+    }
+
+    private String resolveAssistantQuestion(String aiQuestion, List<Map<String, String>> history,
+                                            List<AssessmentField> fields, Map<String, Object> currentData,
+                                            boolean needClarify, String clarifyQuestion) {
+        // 当 LLM 判定回答模糊时，优先使用 LLM 生成的澄清问题，引导用户补充具体信息
+        if (needClarify && clarifyQuestion != null && !clarifyQuestion.trim().isEmpty()) {
+            return clarifyQuestion.trim();
+        }
+
         // 严格的状态机：找到第一个缺失的必填字段，直接提问。不再跳过刚刚问过的字段，依靠强制数据提取来避免死循环。
         AssessmentField target = null;
         for (AssessmentField field : fields) {

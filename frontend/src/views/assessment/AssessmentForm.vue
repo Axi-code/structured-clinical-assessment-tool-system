@@ -200,8 +200,11 @@
           />
           <div class="chat-window" v-loading="conversationLoading">
             <div v-for="(msg, idx) in conversationMessages" :key="idx" class="chat-item" :class="msg.role">
-              <span class="chat-role">{{ msg.role === 'assistant' ? 'AI' : '患者' }}</span>
-              <div class="chat-content">{{ msg.content }}</div>
+              <span class="chat-role">
+                {{ msg.role === 'assistant' ? 'AI' : '患者' }}
+                <el-tag v-if="msg.isClarify" type="warning" size="small" style="margin-left:4px">需补充</el-tag>
+              </span>
+              <div class="chat-content" :class="{ 'is-clarify': msg.isClarify }">{{ msg.content }}</div>
             </div>
           </div>
           <div class="chat-actions">
@@ -295,6 +298,7 @@ const chatInput = ref('')
 const conversationLoading = ref(false)
 const conversationCompletion = ref(0)
 const conversationMissingFields = ref([])
+const conversationNeedClarify = ref(false)
 
 const searchPatients = async (query) => {
   if (query) {
@@ -369,6 +373,7 @@ const resetConversationState = () => {
   chatInput.value = ''
   conversationCompletion.value = 0
   conversationMissingFields.value = []
+  conversationNeedClarify.value = false
 }
 
 const initFieldsDefaultData = () => {
@@ -468,8 +473,13 @@ const handleSendChat = async () => {
       Object.assign(form.assessmentData, res.data.mappedData)
       calculateRealtime()
     }
+    conversationNeedClarify.value = !!res.data.needClarify
     if (res.data.assistantMessage) {
-      conversationMessages.value.push({ role: 'assistant', content: res.data.assistantMessage })
+      conversationMessages.value.push({
+        role: 'assistant',
+        content: res.data.assistantMessage,
+        isClarify: !!res.data.needClarify
+      })
     }
     conversationCompletion.value = res.data.completion || 0
     conversationMissingFields.value = res.data.missingFields || []
@@ -928,6 +938,12 @@ const handleCopySuggestion = () => {
 
 .chat-item.assistant .chat-content {
   background: #ecf5ff;
+  color: #303133;
+}
+
+.chat-item.assistant .chat-content.is-clarify {
+  background: #fdf6ec;
+  border-left: 3px solid #e6a23c;
   color: #303133;
 }
 
