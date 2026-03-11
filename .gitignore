@@ -56,3 +56,6 @@ coverage/
 .temp/
 tmp/
 temp/
+
+# Study notes (personal)
+docs/study/

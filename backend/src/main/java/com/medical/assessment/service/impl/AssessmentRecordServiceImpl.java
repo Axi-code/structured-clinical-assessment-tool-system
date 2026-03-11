@@ -266,12 +266,25 @@ public class AssessmentRecordServiceImpl extends ServiceImpl<AssessmentRecordMap
         boolean useRuleEngine = hasUsableRules(templateId);
         if (useRuleEngine) {
             try {
-                return ruleService.executeAllRules(templateId, assessmentData);
+                Map<String, Object> ruleResult = ruleService.executeAllRules(templateId, assessmentData);
+                supplementDiagnosisName(ruleResult, patient, template, assessmentData);
+                return ruleResult;
             } catch (Exception ignored) {
                 // 规则执行异常时降级走 AI 兜底
             }
         }
         return aiAssessmentService.calculateFallbackResult(patient, template, assessmentData);
+    }
+
+    private void supplementDiagnosisName(Map<String, Object> ruleResult, Patient patient,
+                                         AssessmentTemplate template, Map<String, Object> assessmentData) {
+        try {
+            Map<String, Object> aiResult = aiAssessmentService.calculateFallbackResult(patient, template, assessmentData);
+            if (aiResult.containsKey("diagnosisName") && aiResult.get("diagnosisName") != null) {
+                ruleResult.put("diagnosisName", aiResult.get("diagnosisName"));
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean hasUsableRules(Long templateId) {

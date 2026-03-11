@@ -7,9 +7,11 @@ import com.medical.assessment.entity.AssessmentField;
 import com.medical.assessment.entity.AssessmentRecord;
 import com.medical.assessment.entity.AssessmentTemplate;
 import com.medical.assessment.entity.Patient;
+import com.medical.assessment.entity.AssessmentRule;
 import com.medical.assessment.service.AiAssessmentService;
 import com.medical.assessment.service.AssessmentFieldService;
 import com.medical.assessment.service.AssessmentRecordService;
+import com.medical.assessment.service.AssessmentRuleService;
 import com.medical.assessment.service.AssessmentTemplateService;
 import com.medical.assessment.service.PatientService;
 import com.medical.assessment.service.TemplateDepartmentService;
@@ -34,6 +36,8 @@ public class AssessmentConversationController {
     private AiAssessmentService aiAssessmentService;
     @Autowired
     private AssessmentRecordService assessmentRecordService;
+    @Autowired
+    private AssessmentRuleService assessmentRuleService;
     @Autowired
     private TemplateDepartmentService templateDepartmentService;
 
@@ -104,6 +108,8 @@ public class AssessmentConversationController {
             fieldService.save(field);
         }
 
+        saveGeneratedRules(template.getId(), templateDraft);
+
         List<AssessmentField> savedFields = fieldService.getFieldsByTemplateId(template.getId());
         Map<String, Object> resp = new HashMap<>();
         resp.put("templateId", template.getId());
@@ -112,6 +118,119 @@ public class AssessmentConversationController {
         resp.put("description", template.getDescription());
         resp.put("fields", savedFields);
         return Result.success(resp);
+    }
+
+    private void saveGeneratedRules(Long templateId, Map<String, Object> templateDraft) {
+        List<Map<String, Object>> scoringRules = castListMap(templateDraft.get("scoringRules"));
+        List<Map<String, Object>> riskRules = castListMap(templateDraft.get("riskRules"));
+
+        int priority = 1;
+
+        for (Map<String, Object> sr : scoringRules) {
+            String fieldCode = String.valueOf(sr.get("fieldCode"));
+            Map<String, Object> scoreMap = castMap(sr.get("scoreMap"));
+            List<Map<String, Object>> ranges = castListMap(sr.get("ranges"));
+
+            if (!scoreMap.isEmpty()) {
+                for (Map.Entry<String, Object> entry : scoreMap.entrySet()) {
+                    String optionValue = entry.getKey();
+                    double score = parseDoubleValue(entry.getValue(), 0);
+                    if (score == 0) {
+                        continue;
+                    }
+
+                    AssessmentRule rule = new AssessmentRule();
+                    rule.setTemplateId(templateId);
+                    rule.setRuleName(fieldCode + "=" + optionValue + " 得" + (int) score + "分");
+                    rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
+                    rule.setRuleType("SCORE");
+                    rule.setConditionExpression("${" + fieldCode + "} == '" + escapeQuote(optionValue) + "'");
+                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                    content.put("score", score);
+                    rule.setRuleContent(content.toJSONString());
+                    rule.setPriority(priority++);
+                    rule.setStatus(1);
+                    rule.setRemark("AI自动生成评分规则");
+                    rule.setCreateTime(LocalDateTime.now());
+                    rule.setUpdateTime(LocalDateTime.now());
+                    rule.setDeleted(0);
+                    assessmentRuleService.save(rule);
+                }
+            } else if (!ranges.isEmpty()) {
+                for (Map<String, Object> range : ranges) {
+                    double min = parseDoubleValue(range.get("min"), 0);
+                    double max = parseDoubleValue(range.get("max"), 999);
+                    double score = parseDoubleValue(range.get("score"), 0);
+
+                    AssessmentRule rule = new AssessmentRule();
+                    rule.setTemplateId(templateId);
+                    rule.setRuleName(fieldCode + " [" + (int) min + "-" + (int) max + ") 得" + (int) score + "分");
+                    rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
+                    rule.setRuleType("SCORE");
+                    rule.setConditionExpression("${" + fieldCode + "} >= " + (int) min + " && ${" + fieldCode + "} < " + (int) max);
+                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                    content.put("score", score);
+                    rule.setRuleContent(content.toJSONString());
+                    rule.setPriority(priority++);
+                    rule.setStatus(1);
+                    rule.setRemark("AI自动生成评分规则");
+                    rule.setCreateTime(LocalDateTime.now());
+                    rule.setUpdateTime(LocalDateTime.now());
+                    rule.setDeleted(0);
+                    assessmentRuleService.save(rule);
+                }
+            }
+        }
+
+        for (Map<String, Object> rr : riskRules) {
+            int minScore = (int) parseDoubleValue(rr.get("minScore"), 0);
+            int maxScore = (int) parseDoubleValue(rr.get("maxScore"), 999);
+            String riskLevel = String.valueOf(rr.get("riskLevel"));
+            String riskTip = rr.get("riskTip") != null ? String.valueOf(rr.get("riskTip")) : "";
+
+            String condition;
+            if (maxScore >= 999) {
+                condition = "totalScore >= " + minScore;
+            } else {
+                condition = "totalScore >= " + minScore + " && totalScore < " + maxScore;
+            }
+
+            AssessmentRule rule = new AssessmentRule();
+            rule.setTemplateId(templateId);
+            rule.setRuleName("风险等级-" + riskLevel);
+            rule.setRuleCode("RISK_" + priority);
+            rule.setRuleType("RISK");
+            rule.setConditionExpression(condition);
+            com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+            content.put("riskLevel", riskLevel);
+            content.put("riskTip", riskTip);
+            rule.setRuleContent(content.toJSONString());
+            rule.setPriority(priority++);
+            rule.setStatus(1);
+            rule.setRemark("AI自动生成风险规则");
+            rule.setCreateTime(LocalDateTime.now());
+            rule.setUpdateTime(LocalDateTime.now());
+            rule.setDeleted(0);
+            assessmentRuleService.save(rule);
+        }
+    }
+
+    private double parseDoubleValue(Object value, double defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private String escapeQuote(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("'", "\\'");
     }
 
     @PostMapping("/start")

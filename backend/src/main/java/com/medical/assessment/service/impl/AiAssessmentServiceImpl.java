@@ -100,7 +100,7 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
         String prompt = buildTemplateDraftPrompt(patient, symptomText, departmentName);
         Map<String, Object> params = new HashMap<>();
         params.put("temperature", 0.3);
-        params.put("max_tokens", 1800);
+        params.put("max_tokens", 2800);
 
         String raw = qwenService.generateText(prompt, params);
         JSONObject json = parseJsonSafely(raw);
@@ -111,6 +111,8 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
         result.put("category", normalized.getString("category"));
         result.put("description", normalized.getString("description"));
         result.put("fields", normalized.getJSONArray("fields"));
+        result.put("scoringRules", normalized.getJSONArray("scoringRules"));
+        result.put("riskRules", normalized.getJSONArray("riskRules"));
         return result;
     }
 
@@ -169,7 +171,7 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
     }
 
     private String buildFallbackCalculationPrompt(Patient patient, AssessmentTemplate template, Map<String, Object> assessmentData) {
-        return "你是临床评估助手。当前模板规则不足，请基于评估数据给出结构化评估结果。\n"
+        return "你是临床评估助手。请根据以下评估数据给出结构化评估结果。\n"
                 + "要求：严格输出 JSON，不要输出其他文本。\n"
                 + "JSON schema:\n"
                 + "{\n"
@@ -180,10 +182,15 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
                 + "  \"diagnosisName\": \"用于写入诊断库的简洁诊断名称\",\n"
                 + "  \"abnormalDataTips\": [\"string\"]\n"
                 + "}\n\n"
-                + "约束:\n"
-                + "1) riskTips 为临床可执行建议，避免夸大；\n"
-                + "2) diagnosisName 15字以内，医学表达规范；\n"
-                + "3) 若无法可靠估计 totalScore，给 0。\n\n"
+                + "评分规则（必须严格遵守）:\n"
+                + "1) totalScore 必须根据评估数据综合计算，反映患者临床风险程度，不允许随意给 0；\n"
+                + "2) 每个异常/阳性/高严重度指标加 2~5 分，正常/阴性/无症状指标加 0 分；\n"
+                + "3) 年龄>65岁加 2 分，40~65岁加 1 分，<40岁加 0 分；\n"
+                + "4) 严重程度：轻度加 1 分，中度加 3 分，重度加 5 分；\n"
+                + "5) totalScore 只有在所有指标均正常时才可以为 0；\n"
+                + "6) riskLevel 根据 totalScore 判定：0~4 低风险，5~10 中风险，>10 高风险；\n"
+                + "7) riskTips 为临床可执行建议，避免夸大；\n"
+                + "8) diagnosisName 15字以内，医学表达规范。\n\n"
                 + "上下文:\n"
                 + "- 模板名称: " + safe(template != null ? template.getTemplateName() : null) + "\n"
                 + "- 患者性别: " + safe(patient != null ? patient.getGender() : null) + "\n"
@@ -192,7 +199,7 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
     }
 
     private String buildTemplateDraftPrompt(Patient patient, String symptomText, String departmentName) {
-        return "你是临床评估模板设计助手，需要根据患者主诉自动生成一个可执行的评估模板草案。\n"
+        return "你是临床评估模板设计助手，需要根据患者主诉自动生成一个完整的评估模板草案，包含评估字段、评分规则和风险判定规则。\n"
                 + "必须严格输出 JSON，不要 markdown。\n"
                 + "JSON schema:\n"
                 + "{\n"
@@ -207,6 +214,21 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
                 + "      \"required\": 0,\n"
                 + "      \"options\": [\"选项1\", \"选项2\"]\n"
                 + "    }\n"
+                + "  ],\n"
+                + "  \"scoringRules\": [\n"
+                + "    {\n"
+                + "      \"fieldCode\": \"severity\",\n"
+                + "      \"scoreMap\": {\"轻度\": 1, \"中度\": 3, \"重度\": 5}\n"
+                + "    },\n"
+                + "    {\n"
+                + "      \"fieldCode\": \"age\",\n"
+                + "      \"ranges\": [{\"min\": 0, \"max\": 40, \"score\": 0}, {\"min\": 40, \"max\": 65, \"score\": 1}, {\"min\": 65, \"max\": 200, \"score\": 3}]\n"
+                + "    }\n"
+                + "  ],\n"
+                + "  \"riskRules\": [\n"
+                + "    {\"minScore\": 0, \"maxScore\": 5, \"riskLevel\": \"低风险\", \"riskTip\": \"暂无明显风险，建议常规随访\"},\n"
+                + "    {\"minScore\": 5, \"maxScore\": 12, \"riskLevel\": \"中风险\", \"riskTip\": \"建议进一步检查以明确病因\"},\n"
+                + "    {\"minScore\": 12, \"maxScore\": 999, \"riskLevel\": \"高风险\", \"riskTip\": \"建议尽快就医处理\"}\n"
                 + "  ]\n"
                 + "}\n\n"
                 + "约束:\n"
@@ -215,7 +237,11 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
                 + "3) SELECT/RADIO/CHECKBOX 必须提供 options；其他类型 options 为空数组；\n"
                 + "4) required 只能是 0 或 1；\n"
                 + "5) fieldCode 仅小写字母/数字/下划线；\n"
-                + "6) 语言使用中文医学语义，适合临床初筛场景。\n\n"
+                + "6) 语言使用中文医学语义，适合临床初筛场景；\n"
+                + "7) scoringRules 必须为每个 SELECT 和 RADIO 字段生成 scoreMap（将每个选项映射为整数分值）；对 NUMBER 类型的临床指标字段（如 age）用 ranges 按区间给分；TEXT/TEXTAREA/DATE 字段不需要评分规则；\n"
+                + "8) scoreMap 的分值必须反映临床风险程度：正常/无异常/否=0，越严重分值越高（1~5分）；\n"
+                + "9) riskRules 必须至少包含 3 级（低风险、中风险、高风险），分数区间连续覆盖 0 到最大可能总分；\n"
+                + "10) riskTip 为具体临床建议，与该风险等级的处置措施对应。\n\n"
                 + "上下文:\n"
                 + "- 科室: " + safe(departmentName) + "\n"
                 + "- 患者性别: " + safe(patient != null ? patient.getGender() : null) + "\n"
@@ -263,7 +289,6 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
         ensureBaseField(fields, usedCodes, "duration", "症状持续时间", "TEXT", 1, Collections.emptyList());
         ensureBaseField(fields, usedCodes, "severity", "症状严重程度", "RADIO", 1, Arrays.asList("轻度", "中度", "重度"));
 
-        // 移除强制补充无意义字段的逻辑，如果AI生成得少，就只用基础字段
         if (fields.size() > 20) {
             JSONArray truncated = new JSONArray();
             for (int i = 0; i < 20; i++) {
@@ -273,7 +298,245 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
         }
 
         result.put("fields", fields);
+
+        JSONArray rawScoringRules = raw == null ? null : raw.getJSONArray("scoringRules");
+        JSONArray scoringRules = normalizeScoringRules(rawScoringRules, usedCodes);
+        if (scoringRules.isEmpty()) {
+            scoringRules = generateFallbackScoringRules(fields);
+        }
+        result.put("scoringRules", scoringRules);
+
+        JSONArray rawRiskRules = raw == null ? null : raw.getJSONArray("riskRules");
+        JSONArray riskRules = normalizeRiskRules(rawRiskRules);
+        if (riskRules.isEmpty()) {
+            riskRules = generateFallbackRiskRules(scoringRules);
+        }
+        result.put("riskRules", riskRules);
+
         return result;
+    }
+
+    private JSONArray normalizeScoringRules(JSONArray rawRules, Set<String> validFieldCodes) {
+        JSONArray rules = new JSONArray();
+        if (rawRules == null) {
+            return rules;
+        }
+        for (int i = 0; i < rawRules.size(); i++) {
+            JSONObject rule = rawRules.getJSONObject(i);
+            if (rule == null) {
+                continue;
+            }
+            String fieldCode = safe(rule.getString("fieldCode")).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]", "_");
+            if (fieldCode.isEmpty() || !validFieldCodes.contains(fieldCode)) {
+                continue;
+            }
+            JSONObject scoreMap = rule.getJSONObject("scoreMap");
+            JSONArray ranges = rule.getJSONArray("ranges");
+
+            if (scoreMap != null && !scoreMap.isEmpty()) {
+                JSONObject normalized = new JSONObject();
+                normalized.put("fieldCode", fieldCode);
+                normalized.put("scoreMap", scoreMap);
+                rules.add(normalized);
+            } else if (ranges != null && !ranges.isEmpty()) {
+                JSONArray normalizedRanges = new JSONArray();
+                for (int j = 0; j < ranges.size(); j++) {
+                    JSONObject r = ranges.getJSONObject(j);
+                    if (r != null && r.containsKey("min") && r.containsKey("max") && r.containsKey("score")) {
+                        normalizedRanges.add(r);
+                    }
+                }
+                if (!normalizedRanges.isEmpty()) {
+                    JSONObject normalized = new JSONObject();
+                    normalized.put("fieldCode", fieldCode);
+                    normalized.put("ranges", normalizedRanges);
+                    rules.add(normalized);
+                }
+            }
+        }
+        return rules;
+    }
+
+    private JSONArray normalizeRiskRules(JSONArray rawRules) {
+        JSONArray rules = new JSONArray();
+        if (rawRules == null) {
+            return rules;
+        }
+        for (int i = 0; i < rawRules.size(); i++) {
+            JSONObject rule = rawRules.getJSONObject(i);
+            if (rule == null) {
+                continue;
+            }
+            String riskLevel = safe(rule.getString("riskLevel"));
+            if (riskLevel.isEmpty()) {
+                continue;
+            }
+            JSONObject normalized = new JSONObject();
+            normalized.put("minScore", rule.getIntValue("minScore"));
+            normalized.put("maxScore", rule.getIntValue("maxScore"));
+            normalized.put("riskLevel", riskLevel);
+            normalized.put("riskTip", safe(rule.getString("riskTip")));
+            rules.add(normalized);
+        }
+        return rules;
+    }
+
+    private JSONArray generateFallbackScoringRules(JSONArray fields) {
+        JSONArray rules = new JSONArray();
+        for (int i = 0; i < fields.size(); i++) {
+            JSONObject field = fields.getJSONObject(i);
+            String fieldCode = field.getString("fieldCode");
+            String fieldType = field.getString("fieldType");
+            JSONArray options = field.getJSONArray("options");
+
+            if ("gender".equals(fieldCode)) {
+                continue;
+            }
+
+            if (("SELECT".equals(fieldType) || "RADIO".equals(fieldType)) && options != null && options.size() >= 2) {
+                JSONObject rule = new JSONObject();
+                rule.put("fieldCode", fieldCode);
+                JSONObject scoreMap = new JSONObject();
+
+                if (isSeverityLikeField(options)) {
+                    assignSeverityScores(options, scoreMap);
+                } else if (options.size() == 2 && isBinaryField(options)) {
+                    for (int j = 0; j < options.size(); j++) {
+                        String opt = options.getString(j);
+                        scoreMap.put(opt, isPositiveOption(opt) ? 2 : 0);
+                    }
+                } else {
+                    for (int j = 0; j < options.size(); j++) {
+                        scoreMap.put(options.getString(j), j);
+                    }
+                }
+                rule.put("scoreMap", scoreMap);
+                rules.add(rule);
+            } else if ("NUMBER".equals(fieldType) && "age".equals(fieldCode)) {
+                JSONObject rule = new JSONObject();
+                rule.put("fieldCode", "age");
+                JSONArray ranges = new JSONArray();
+                ranges.add(makeRange(0, 40, 0));
+                ranges.add(makeRange(40, 65, 1));
+                ranges.add(makeRange(65, 200, 2));
+                rule.put("ranges", ranges);
+                rules.add(rule);
+            }
+        }
+        return rules;
+    }
+
+    private boolean isSeverityLikeField(JSONArray options) {
+        Set<String> severityKeywords = new HashSet<>(Arrays.asList("轻度", "中度", "重度", "轻", "中", "重", "无", "轻微", "严重"));
+        int matchCount = 0;
+        for (int i = 0; i < options.size(); i++) {
+            if (severityKeywords.contains(options.getString(i))) {
+                matchCount++;
+            }
+        }
+        return matchCount >= 2;
+    }
+
+    private void assignSeverityScores(JSONArray options, JSONObject scoreMap) {
+        Map<String, Integer> severityScoreMap = new HashMap<>();
+        severityScoreMap.put("无", 0);
+        severityScoreMap.put("正常", 0);
+        severityScoreMap.put("轻微", 1);
+        severityScoreMap.put("轻", 1);
+        severityScoreMap.put("轻度", 1);
+        severityScoreMap.put("中", 3);
+        severityScoreMap.put("中度", 3);
+        severityScoreMap.put("重", 5);
+        severityScoreMap.put("重度", 5);
+        severityScoreMap.put("严重", 5);
+        for (int i = 0; i < options.size(); i++) {
+            String opt = options.getString(i);
+            Integer score = severityScoreMap.get(opt);
+            scoreMap.put(opt, score != null ? score : i);
+        }
+    }
+
+    private boolean isBinaryField(JSONArray options) {
+        if (options.size() != 2) {
+            return false;
+        }
+        String o0 = options.getString(0);
+        String o1 = options.getString(1);
+        return (isPositiveOption(o0) && isNegativeOption(o1)) || (isNegativeOption(o0) && isPositiveOption(o1));
+    }
+
+    private boolean isPositiveOption(String option) {
+        return "是".equals(option) || "有".equals(option) || "阳性".equals(option) || "存在".equals(option);
+    }
+
+    private boolean isNegativeOption(String option) {
+        return "否".equals(option) || "无".equals(option) || "阴性".equals(option) || "不存在".equals(option);
+    }
+
+    private JSONObject makeRange(int min, int max, int score) {
+        JSONObject r = new JSONObject();
+        r.put("min", min);
+        r.put("max", max);
+        r.put("score", score);
+        return r;
+    }
+
+    private JSONArray generateFallbackRiskRules(JSONArray scoringRules) {
+        int maxPossibleScore = 0;
+        if (scoringRules != null) {
+            for (int i = 0; i < scoringRules.size(); i++) {
+                JSONObject rule = scoringRules.getJSONObject(i);
+                JSONObject scoreMap = rule.getJSONObject("scoreMap");
+                JSONArray ranges = rule.getJSONArray("ranges");
+                int maxFieldScore = 0;
+                if (scoreMap != null) {
+                    for (String key : scoreMap.keySet()) {
+                        int s = scoreMap.getIntValue(key);
+                        if (s > maxFieldScore) {
+                            maxFieldScore = s;
+                        }
+                    }
+                } else if (ranges != null) {
+                    for (int j = 0; j < ranges.size(); j++) {
+                        int s = ranges.getJSONObject(j).getIntValue("score");
+                        if (s > maxFieldScore) {
+                            maxFieldScore = s;
+                        }
+                    }
+                }
+                maxPossibleScore += maxFieldScore;
+            }
+        }
+        if (maxPossibleScore <= 0) {
+            maxPossibleScore = 20;
+        }
+
+        int lowThreshold = Math.max(1, (int) Math.ceil(maxPossibleScore * 0.3));
+        int highThreshold = Math.max(lowThreshold + 1, (int) Math.ceil(maxPossibleScore * 0.6));
+
+        JSONArray rules = new JSONArray();
+        JSONObject low = new JSONObject();
+        low.put("minScore", 0);
+        low.put("maxScore", lowThreshold);
+        low.put("riskLevel", "低风险");
+        low.put("riskTip", "暂无明显风险，建议常规随访");
+        rules.add(low);
+
+        JSONObject mid = new JSONObject();
+        mid.put("minScore", lowThreshold);
+        mid.put("maxScore", highThreshold);
+        mid.put("riskLevel", "中风险");
+        mid.put("riskTip", "建议进一步检查以明确病因");
+        rules.add(mid);
+
+        JSONObject high = new JSONObject();
+        high.put("minScore", highThreshold);
+        high.put("maxScore", 999);
+        high.put("riskLevel", "高风险");
+        high.put("riskTip", "建议尽快就医，采取针对性治疗措施");
+        rules.add(high);
+
+        return rules;
     }
 
     private JSONObject normalizeField(JSONObject field, Set<String> usedCodes) {
