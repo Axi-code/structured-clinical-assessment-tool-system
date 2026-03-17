@@ -28,6 +28,12 @@ import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import java.util.List;
 
+/**
+ * 前端请求来源：
+ * - 患者管理(PatientList.vue)：患者列表、删除；患者表单(PatientForm.vue)：新增/编辑患者、获取详情
+ * - 诊断列表(DiagnosisList.vue)、诊断详情(DiagnosisDetail.vue)：患者信息、更新诊断、采纳AI诊断
+ * - 评估表单(AssessmentForm.vue)、评估历史(AssessmentHistory.vue)：患者选择与历史记录
+ */
 @RestController
 @RequestMapping("/patient")
 public class PatientController {

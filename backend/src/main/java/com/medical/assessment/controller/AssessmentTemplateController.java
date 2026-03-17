@@ -22,10 +22,15 @@ import javax.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 前端请求来源：
+ * - 评估模板(TemplateList.vue)：模板列表、启用/停用、删除；模板详情(TemplateDetail.vue)、模板表单(TemplateForm.vue)：模板增删改、字段管理；版本管理(TemplateVersions.vue)：版本列表、创建新版本
+ * - 评估表单(AssessmentForm.vue)：选择模板、获取模板字段；统计(StatisticsDashboard.vue)：按模板统计；评估历史(AssessmentHistory.vue)：模板相关
+ */
 @RestController
 @RequestMapping("/assessment-template")
 public class AssessmentTemplateController {
-    
+
     @Autowired
     private AssessmentTemplateService templateService;
     

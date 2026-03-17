@@ -15,10 +15,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 
+/**
+ * 前端请求来源：
+ * - 操作日志(OperationLogList.vue)：分页查询日志（按模块、操作、用户名、时间筛选）
+ */
 @RestController
 @RequestMapping("/operation-log")
 public class OperationLogController {
-    
+
     @Autowired
     private OperationLogService operationLogService;
     

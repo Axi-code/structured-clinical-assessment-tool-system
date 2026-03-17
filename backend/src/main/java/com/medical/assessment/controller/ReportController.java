@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * 评估报告生成控制器
+ * 前端请求来源：
+ * - 评估历史(AssessmentHistory.vue)、诊断详情(DiagnosisDetail.vue)：报告预览(PDF/Word)、报告下载(PDF/Word)
  */
 @RestController
 @RequestMapping("/report")
@@ -34,7 +35,8 @@ public class ReportController {
     public Result<String> previewPdfReport(
             @PathVariable Long recordId,
             @RequestParam(required = false) Long templateId) {
-        return Result.success(reportService.previewPdfReport(recordId, templateId));
+        String base64 = reportService.previewPdfReport(recordId, templateId);
+        return Result.success("操作成功", base64);
     }
     
     /**
@@ -52,7 +54,8 @@ public class ReportController {
     public Result<String> previewWordReport(
             @PathVariable Long recordId,
             @RequestParam(required = false) Long templateId) {
-        return Result.success(reportService.previewWordReport(recordId, templateId));
+        String base64 = reportService.previewWordReport(recordId, templateId);
+        return Result.success("操作成功", base64);
     }
     
     /**

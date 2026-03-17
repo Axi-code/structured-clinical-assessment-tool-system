@@ -44,8 +44,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return storedPassword != null && storedPassword.startsWith(BCRYPT_PREFIX);
     }
 
+    /** 32 位十六进制，视为 MD5 存储。 */
+    private static boolean looksLikeMd5(String s) {
+        if (s == null || s.length() != 32) return false;
+        return s.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+    }
+
     /**
-     * 校验明文密码与存储密码是否匹配（支持 BCrypt 与旧版 MD5）。
+     * 校验明文密码与存储密码是否匹配（支持 BCrypt、旧版 MD5、以及迁移用明文）。
+     * 若库中为明文（非 BCrypt 且非 32 位十六进制），则按明文比对，登录成功后会迁移为 BCrypt。
      */
     private boolean matchesPassword(String rawPassword, String storedPassword) {
         if (storedPassword == null) {
@@ -54,9 +61,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (isBcryptHash(storedPassword)) {
             return passwordEncoder.matches(rawPassword, storedPassword);
         }
-        // 与历史数据兼容：沿用原逻辑使用默认字符集计算 MD5
-        String md5 = DigestUtils.md5DigestAsHex(rawPassword.getBytes(StandardCharsets.UTF_8));
-        return md5.equalsIgnoreCase(storedPassword);
+        if (looksLikeMd5(storedPassword)) {
+            String md5 = DigestUtils.md5DigestAsHex(rawPassword.getBytes(StandardCharsets.UTF_8));
+            return md5.equalsIgnoreCase(storedPassword);
+        }
+        // 兼容：库中为明文密码（如初期数据或手工维护），按明文比对
+        return rawPassword.equals(storedPassword);
     }
 
     @Override

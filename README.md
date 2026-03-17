@@ -14,7 +14,9 @@
 - 支持 **AI 评估完成后自动匹配诊断字典并回填患者当前诊断**
 - 支持 **AI 建议诊断未匹配时一键加入诊断字典并同步到患者**
 - 支持评估模板、字段、模板版本的管理
+- 支持模板理论分值（minScore / maxScore）的**根据规则自动计算**与手动填写
 - 支持评估规则配置、规则测试与实时计算
+- 支持**根据模板字段自动生成规则**：修复缺失规则的 AI 模板
 - 支持评估草稿保存、提交、历史查询与对比
 - 支持 PDF / Word 报告预览与导出
 - 支持统计分析面板与风险预警
@@ -75,6 +77,8 @@
 - 模板启停用
 - 模板字段管理
 - 模板版本管理
+- **理论最低分 / 理论最高分**：支持手动填写或**根据 SCORE 规则自动计算**
+- **规则管理快捷入口**：编辑模板时可一键跳转至该模板的规则管理页
 
 ### 4. 评估规则管理
 
@@ -83,6 +87,8 @@
 - 规则启停用
 - 规则测试
 - 表单实时计算
+- **根据规则计算分值范围**：`GET /assessment-rule/score-range/{templateId}`，用于自动填充模板的 minScore / maxScore
+- **根据字段自动生成规则**：`POST /assessment-rule/regenerate/{templateId}`，为缺失规则的 AI 模板自动生成 SCORE 与 RISK 规则
 
 ### 5. 评估记录
 
@@ -117,6 +123,8 @@
 - AI 实时辅助计算
 - AI 诊疗建议生成与重生成
 - **AI 生成模板时同步生成 SCORE 和 RISK 规则，确保评分由规则引擎执行，结果确定可解释**
+- **AI 生成模板时自动填充 template_content、min_score、max_score，并采用事务保证模板与规则一起保存**
+- **AI 模板若因历史原因缺失规则，可一键「根据字段自动生成规则」补齐**
 - **AI 评估完成后自动提取 `diagnosisName`，按科室诊断字典匹配并回填患者当前诊断**
 - **AI 建议诊断未匹配时，高亮提示并支持一键加入诊断字典、同步到患者**
 
@@ -637,6 +645,8 @@ Vite 代理配置位于 `frontend/vite.config.js`：
 - `/assessment-rule/{id}/status`
 - `/assessment-rule/test`
 - `/assessment-rule/calculate-realtime`
+- `/assessment-rule/score-range/{templateId}`（根据 SCORE 规则计算分值范围）
+- `/assessment-rule/regenerate/{templateId}`（根据字段自动生成规则）
 
 ### 评估记录模块
 
@@ -783,6 +793,14 @@ ALTER TABLE `patient`
   MODIFY COLUMN `emergency_contact` varchar(150) NULL DEFAULT NULL COMMENT '紧急联系人（加密存储）',
   MODIFY COLUMN `emergency_phone` varchar(100) NULL DEFAULT NULL COMMENT '紧急联系电话（加密存储）';
 ```
+
+### 6. AI 模板没有规则 / 理论分值无法自动计算
+
+若 AI 生成的模板在规则管理中显示为空，或点击「根据规则自动计算」时提示「暂无评分规则」：
+
+1. 在模板编辑页，点击「根据规则自动计算」旁的**「点此根据字段自动生成规则」**，系统会根据模板字段自动生成 SCORE 与 RISK 规则；
+2. 或点击「规则管理」按钮，手动为该模板配置评分规则；
+3. 配置完成后再次点击「根据规则自动计算」，即可自动填充理论最低分与最高分。
 
 ## 后续可扩展方向
 

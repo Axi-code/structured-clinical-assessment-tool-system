@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +34,12 @@ public class QwenServiceImpl implements QwenService {
     @Override
     public String generateText(String prompt, Map<String, Object> parameters) {
         try {
+            // 优先检查 API Key 是否正确加载，避免 401 难以排查
+            String apiKey = qwenConfig.getApiKey();
+            if (apiKey == null || apiKey.trim().isEmpty()) {
+                throw new RuntimeException("通义千问 API Key 为空：请检查环境变量 QWEN_API_KEY 是否已配置，并且在启动应用前生效");
+            }
+            
             // 构建请求体
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", qwenConfig.getModel());
@@ -59,7 +66,7 @@ public class QwenServiceImpl implements QwenService {
             // 设置请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + qwenConfig.getApiKey());
+            headers.set("Authorization", "Bearer " + apiKey);
             headers.set("X-DashScope-SSE", "disable");
             
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
@@ -121,7 +128,14 @@ public class QwenServiceImpl implements QwenService {
             
             throw new RuntimeException("Qwen API返回异常: " + response.getBody());
         } catch (Exception e) {
-            throw new RuntimeException("调用Qwen API失败: " + e.getMessage(), e);
+            String hint = e.getMessage();
+            if (e.getCause() instanceof HttpClientErrorException) {
+                HttpClientErrorException ex = (HttpClientErrorException) e.getCause();
+                if (ex.getStatusCode() != null && ex.getStatusCode().value() == 401) {
+                    hint = "通义千问 API Key 无效或未配置。请到阿里云 DashScope 控制台获取有效 API Key，并在配置中设置 qwen.api-key 或环境变量 QWEN_API_KEY";
+                }
+            }
+            throw new RuntimeException("调用Qwen API失败: " + hint, e);
         }
     }
 }

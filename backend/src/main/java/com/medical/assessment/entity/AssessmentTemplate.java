@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 评估模板实体，对应评估量表/表单模板表。
+ * 定义评估表的基础信息、结构内容、版本号、启用状态及可选分值区间等，是评估记录生成的蓝本。
+ * 主要会被 `AssessmentTemplateMapper`、`AssessmentTemplateService`/`AssessmentTemplateServiceImpl`、
+ * `AssessmentTemplateController`，以及评估会话/AI 评估、报告生成等相关业务模块调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;

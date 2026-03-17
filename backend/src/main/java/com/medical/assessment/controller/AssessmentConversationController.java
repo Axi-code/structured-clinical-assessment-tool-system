@@ -22,6 +22,10 @@ import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * 前端请求来源：
+ * - 评估表单(AssessmentForm.vue) 对话式评估：生成模板、开始对话、发送回复、实时计算、结束对话、推荐模板
+ */
 @RestController
 @RequestMapping("/assessment-conversation")
 public class AssessmentConversationController {
@@ -43,6 +47,7 @@ public class AssessmentConversationController {
 
     @PostMapping("/generate-template")
     @RequiresRoles({"ADMIN", "DOCTOR", "NURSE"})
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> generateTemplate(@RequestBody GenerateTemplateRequest body) {
         if (body.getPatientId() == null) {
             return Result.error("patientId 不能为空");
@@ -69,15 +74,27 @@ public class AssessmentConversationController {
             return Result.error("AI未生成有效模板字段");
         }
 
+        com.alibaba.fastjson2.JSONObject templateContentJson = new com.alibaba.fastjson2.JSONObject();
+        templateContentJson.put("category", category);
+        templateContentJson.put("description", description);
+        templateContentJson.put("fields", templateDraft.get("fields"));
+        templateContentJson.put("scoringRules", templateDraft.get("scoringRules"));
+        templateContentJson.put("riskRules", templateDraft.get("riskRules"));
+
+        List<Map<String, Object>> scoringRulesDraft = castListMap(templateDraft.get("scoringRules"));
+        java.math.BigDecimal[] scoreRange = calculateScoreRange(scoringRulesDraft);
+
         AssessmentTemplate template = new AssessmentTemplate();
         template.setTemplateName(templateName);
         template.setTemplateCode("AI_" + System.currentTimeMillis());
         template.setCategory(category);
         template.setDescription(description);
-        template.setTemplateContent("{}");
+        template.setTemplateContent(templateContentJson.toJSONString());
         template.setVersion(1);
         template.setStatus(1);
         template.setRemark("AI自动生成模板");
+        template.setMinScore(scoreRange[0]);
+        template.setMaxScore(scoreRange[1]);
         template.setCreateTime(LocalDateTime.now());
         template.setUpdateTime(LocalDateTime.now());
         template.setDeleted(0);
@@ -125,94 +142,151 @@ public class AssessmentConversationController {
         List<Map<String, Object>> riskRules = castListMap(templateDraft.get("riskRules"));
 
         int priority = 1;
+        int savedCount = 0;
 
         for (Map<String, Object> sr : scoringRules) {
-            String fieldCode = String.valueOf(sr.get("fieldCode"));
-            Map<String, Object> scoreMap = castMap(sr.get("scoreMap"));
-            List<Map<String, Object>> ranges = castListMap(sr.get("ranges"));
+            try {
+                String fieldCode = String.valueOf(sr.get("fieldCode"));
+                Map<String, Object> scoreMap = castMap(sr.get("scoreMap"));
+                List<Map<String, Object>> ranges = castListMap(sr.get("ranges"));
 
-            if (!scoreMap.isEmpty()) {
-                for (Map.Entry<String, Object> entry : scoreMap.entrySet()) {
-                    String optionValue = entry.getKey();
-                    double score = parseDoubleValue(entry.getValue(), 0);
-                    if (score == 0) {
-                        continue;
+                if (!scoreMap.isEmpty()) {
+                    for (Map.Entry<String, Object> entry : scoreMap.entrySet()) {
+                        try {
+                            String optionValue = entry.getKey();
+                            double score = parseDoubleValue(entry.getValue(), 0);
+                            if (score == 0) {
+                                continue;
+                            }
+
+                            AssessmentRule rule = new AssessmentRule();
+                            rule.setTemplateId(templateId);
+                            rule.setRuleName(fieldCode + "=" + optionValue + " 得" + (int) score + "分");
+                            rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
+                            rule.setRuleType("SCORE");
+                            rule.setConditionExpression("${" + fieldCode + "} == '" + escapeQuote(optionValue) + "'");
+                            com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                            content.put("score", score);
+                            rule.setRuleContent(content.toJSONString());
+                            rule.setPriority(priority++);
+                            rule.setStatus(1);
+                            rule.setRemark("AI自动生成评分规则");
+                            rule.setCreateTime(LocalDateTime.now());
+                            rule.setUpdateTime(LocalDateTime.now());
+                            rule.setDeleted(0);
+                            assessmentRuleService.save(rule);
+                            savedCount++;
+                        } catch (Exception e) {
+                            System.err.println("[saveGeneratedRules] 保存 scoreMap 规则失败, fieldCode=" + fieldCode + ", error=" + e.getMessage());
+                        }
                     }
+                } else if (!ranges.isEmpty()) {
+                    for (Map<String, Object> range : ranges) {
+                        try {
+                            double min = parseDoubleValue(range.get("min"), 0);
+                            double max = parseDoubleValue(range.get("max"), 999);
+                            double score = parseDoubleValue(range.get("score"), 0);
 
-                    AssessmentRule rule = new AssessmentRule();
-                    rule.setTemplateId(templateId);
-                    rule.setRuleName(fieldCode + "=" + optionValue + " 得" + (int) score + "分");
-                    rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
-                    rule.setRuleType("SCORE");
-                    rule.setConditionExpression("${" + fieldCode + "} == '" + escapeQuote(optionValue) + "'");
-                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
-                    content.put("score", score);
-                    rule.setRuleContent(content.toJSONString());
-                    rule.setPriority(priority++);
-                    rule.setStatus(1);
-                    rule.setRemark("AI自动生成评分规则");
-                    rule.setCreateTime(LocalDateTime.now());
-                    rule.setUpdateTime(LocalDateTime.now());
-                    rule.setDeleted(0);
-                    assessmentRuleService.save(rule);
+                            AssessmentRule rule = new AssessmentRule();
+                            rule.setTemplateId(templateId);
+                            rule.setRuleName(fieldCode + " [" + (int) min + "-" + (int) max + ") 得" + (int) score + "分");
+                            rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
+                            rule.setRuleType("SCORE");
+                            rule.setConditionExpression("${" + fieldCode + "} >= " + (int) min + " && ${" + fieldCode + "} < " + (int) max);
+                            com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                            content.put("score", score);
+                            rule.setRuleContent(content.toJSONString());
+                            rule.setPriority(priority++);
+                            rule.setStatus(1);
+                            rule.setRemark("AI自动生成评分规则");
+                            rule.setCreateTime(LocalDateTime.now());
+                            rule.setUpdateTime(LocalDateTime.now());
+                            rule.setDeleted(0);
+                            assessmentRuleService.save(rule);
+                            savedCount++;
+                        } catch (Exception e) {
+                            System.err.println("[saveGeneratedRules] 保存 range 规则失败, fieldCode=" + fieldCode + ", error=" + e.getMessage());
+                        }
+                    }
                 }
-            } else if (!ranges.isEmpty()) {
-                for (Map<String, Object> range : ranges) {
-                    double min = parseDoubleValue(range.get("min"), 0);
-                    double max = parseDoubleValue(range.get("max"), 999);
-                    double score = parseDoubleValue(range.get("score"), 0);
-
-                    AssessmentRule rule = new AssessmentRule();
-                    rule.setTemplateId(templateId);
-                    rule.setRuleName(fieldCode + " [" + (int) min + "-" + (int) max + ") 得" + (int) score + "分");
-                    rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
-                    rule.setRuleType("SCORE");
-                    rule.setConditionExpression("${" + fieldCode + "} >= " + (int) min + " && ${" + fieldCode + "} < " + (int) max);
-                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
-                    content.put("score", score);
-                    rule.setRuleContent(content.toJSONString());
-                    rule.setPriority(priority++);
-                    rule.setStatus(1);
-                    rule.setRemark("AI自动生成评分规则");
-                    rule.setCreateTime(LocalDateTime.now());
-                    rule.setUpdateTime(LocalDateTime.now());
-                    rule.setDeleted(0);
-                    assessmentRuleService.save(rule);
-                }
+            } catch (Exception e) {
+                System.err.println("[saveGeneratedRules] 处理 scoringRule 失败: " + e.getMessage());
             }
         }
 
         for (Map<String, Object> rr : riskRules) {
-            int minScore = (int) parseDoubleValue(rr.get("minScore"), 0);
-            int maxScore = (int) parseDoubleValue(rr.get("maxScore"), 999);
-            String riskLevel = String.valueOf(rr.get("riskLevel"));
-            String riskTip = rr.get("riskTip") != null ? String.valueOf(rr.get("riskTip")) : "";
+            try {
+                int minScore = (int) parseDoubleValue(rr.get("minScore"), 0);
+                int maxScore = (int) parseDoubleValue(rr.get("maxScore"), 999);
+                String riskLevel = String.valueOf(rr.get("riskLevel"));
+                String riskTip = rr.get("riskTip") != null ? String.valueOf(rr.get("riskTip")) : "";
 
-            String condition;
-            if (maxScore >= 999) {
-                condition = "totalScore >= " + minScore;
-            } else {
-                condition = "totalScore >= " + minScore + " && totalScore < " + maxScore;
+                String condition;
+                if (maxScore >= 999) {
+                    condition = "totalScore >= " + minScore;
+                } else {
+                    condition = "totalScore >= " + minScore + " && totalScore < " + maxScore;
+                }
+
+                AssessmentRule rule = new AssessmentRule();
+                rule.setTemplateId(templateId);
+                rule.setRuleName("风险等级-" + riskLevel);
+                rule.setRuleCode("RISK_" + priority);
+                rule.setRuleType("RISK");
+                rule.setConditionExpression(condition);
+                com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                content.put("riskLevel", riskLevel);
+                content.put("riskTip", riskTip);
+                rule.setRuleContent(content.toJSONString());
+                rule.setPriority(priority++);
+                rule.setStatus(1);
+                rule.setRemark("AI自动生成风险规则");
+                rule.setCreateTime(LocalDateTime.now());
+                rule.setUpdateTime(LocalDateTime.now());
+                rule.setDeleted(0);
+                assessmentRuleService.save(rule);
+                savedCount++;
+            } catch (Exception e) {
+                System.err.println("[saveGeneratedRules] 保存风险规则失败: " + e.getMessage());
             }
-
-            AssessmentRule rule = new AssessmentRule();
-            rule.setTemplateId(templateId);
-            rule.setRuleName("风险等级-" + riskLevel);
-            rule.setRuleCode("RISK_" + priority);
-            rule.setRuleType("RISK");
-            rule.setConditionExpression(condition);
-            com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
-            content.put("riskLevel", riskLevel);
-            content.put("riskTip", riskTip);
-            rule.setRuleContent(content.toJSONString());
-            rule.setPriority(priority++);
-            rule.setStatus(1);
-            rule.setRemark("AI自动生成风险规则");
-            rule.setCreateTime(LocalDateTime.now());
-            rule.setUpdateTime(LocalDateTime.now());
-            rule.setDeleted(0);
-            assessmentRuleService.save(rule);
         }
+
+        if (savedCount == 0 && (!scoringRules.isEmpty() || !riskRules.isEmpty())) {
+            System.err.println("[saveGeneratedRules] 警告：AI 生成了 " + scoringRules.size() + " 条评分规则和 "
+                    + riskRules.size() + " 条风险规则，但全部保存失败！templateId=" + templateId);
+        }
+    }
+
+    private java.math.BigDecimal[] calculateScoreRange(List<Map<String, Object>> scoringRules) {
+        double totalMin = 0;
+        double totalMax = 0;
+        for (Map<String, Object> sr : scoringRules) {
+            Map<String, Object> scoreMap = castMap(sr.get("scoreMap"));
+            List<Map<String, Object>> ranges = castListMap(sr.get("ranges"));
+
+            double fieldMin = Double.MAX_VALUE;
+            double fieldMax = 0;
+            if (!scoreMap.isEmpty()) {
+                for (Object v : scoreMap.values()) {
+                    double s = parseDoubleValue(v, 0);
+                    if (s < fieldMin) fieldMin = s;
+                    if (s > fieldMax) fieldMax = s;
+                }
+            } else if (!ranges.isEmpty()) {
+                for (Map<String, Object> range : ranges) {
+                    double s = parseDoubleValue(range.get("score"), 0);
+                    if (s < fieldMin) fieldMin = s;
+                    if (s > fieldMax) fieldMax = s;
+                }
+            }
+            if (fieldMin == Double.MAX_VALUE) fieldMin = 0;
+            totalMin += fieldMin;
+            totalMax += fieldMax;
+        }
+        return new java.math.BigDecimal[]{
+                java.math.BigDecimal.valueOf(totalMin),
+                java.math.BigDecimal.valueOf(totalMax)
+        };
     }
 
     private double parseDoubleValue(Object value, double defaultValue) {

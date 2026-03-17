@@ -18,10 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 评估记录相关接口
- * 覆盖文档中的：
- * - 临床评估数据采集（创建草稿、保存草稿、提交完成）
- * - 评估数据管理与历史记录（历史记录查询、记录对比）
+ * 前端请求来源：
+ * - 评估表单(AssessmentForm.vue)：创建草稿、保存评估、提交评估
+ * - 评估历史(AssessmentHistory.vue)：患者历史记录、记录对比
+ * - 诊断详情(DiagnosisDetail.vue)、诊断列表(DiagnosisList.vue)：患者评估历史
  */
 @RestController
 @RequestMapping("/assessment-record")

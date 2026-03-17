@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 系统用户实体，对应系统用户表 `sys_user`。
+ * 记录登录账号、姓名、联系方式、角色、所属科室及状态等信息，用于权限控制和操作审计。
+ * 主要会被 `UserMapper`、`UserService`/`UserServiceImpl`、`UserController`，
+ * 以及登录认证、安全控制、操作日志等相关业务模块调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;

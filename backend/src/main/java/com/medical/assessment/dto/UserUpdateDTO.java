@@ -1,5 +1,10 @@
 package com.medical.assessment.dto;
 
+/**
+ * 用户更新请求 DTO
+ * 用途：承接“编辑用户”时提交的更新信息（含用户 ID 与启停用状态等）。
+ * 谁传给谁：前端用户管理-编辑用户页面/弹窗 → `UserController.updateUser` → `UserService.updateUser`（`UserServiceImpl.updateUser`）
+ */
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 

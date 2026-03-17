@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 评估记录实体，对应一次完整的评估过程及其结果。
+ * 保存患者在某个评估模板下的填报数据、评分结果、风险等级等信息。
+ * 主要会被 `AssessmentRecordMapper`、`AssessmentRecordService`/`AssessmentRecordServiceImpl`、
+ * 以及对外提供评估记录查询/保存能力的 `AssessmentRecordController` 和统计报表相关业务调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;

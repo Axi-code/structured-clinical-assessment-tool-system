@@ -6,10 +6,12 @@ import com.medical.assessment.dto.AssessmentTemplateCreateDTO;
 import com.medical.assessment.dto.AssessmentTemplateUpdateDTO;
 import com.medical.assessment.dto.AssessmentTemplateVersionCreateDTO;
 import com.medical.assessment.entity.AssessmentField;
+import com.medical.assessment.entity.AssessmentRule;
 import com.medical.assessment.entity.AssessmentTemplate;
 import com.medical.assessment.exception.BusinessException;
 import com.medical.assessment.mapper.AssessmentTemplateMapper;
 import com.medical.assessment.service.AssessmentFieldService;
+import com.medical.assessment.service.AssessmentRuleService;
 import com.medical.assessment.service.AssessmentTemplateService;
 import com.medical.assessment.service.TemplateDepartmentService;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,9 @@ public class AssessmentTemplateServiceImpl extends ServiceImpl<AssessmentTemplat
 
     @Resource
     private AssessmentFieldService fieldService;
+
+    @Resource
+    private AssessmentRuleService ruleService;
 
     @Override
     public AssessmentTemplate getTemplateDetail(Long id) {
@@ -144,6 +149,25 @@ public class AssessmentTemplateServiceImpl extends ServiceImpl<AssessmentTemplat
             newField.setUpdateTime(LocalDateTime.now());
             newField.setDeleted(0);
             fieldService.save(newField);
+        }
+
+        List<AssessmentRule> sourceRules = ruleService.getRulesByTemplateId(id);
+        for (AssessmentRule sourceRule : sourceRules) {
+            AssessmentRule newRule = new AssessmentRule();
+            newRule.setTemplateId(template.getId());
+            newRule.setRuleName(sourceRule.getRuleName());
+            newRule.setRuleCode(sourceRule.getRuleCode());
+            newRule.setRuleType(sourceRule.getRuleType());
+            newRule.setRuleContent(sourceRule.getRuleContent());
+            newRule.setConditionExpression(sourceRule.getConditionExpression());
+            newRule.setResultExpression(sourceRule.getResultExpression());
+            newRule.setPriority(sourceRule.getPriority());
+            newRule.setStatus(sourceRule.getStatus());
+            newRule.setRemark(sourceRule.getRemark());
+            newRule.setCreateTime(LocalDateTime.now());
+            newRule.setUpdateTime(LocalDateTime.now());
+            newRule.setDeleted(0);
+            ruleService.save(newRule);
         }
 
         return template;

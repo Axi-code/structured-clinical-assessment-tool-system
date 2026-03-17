@@ -1,5 +1,10 @@
 package com.medical.assessment.dto;
 
+/**
+ * 评估模板新增请求 DTO
+ * 用途：承接“新增评估模板”时提交的模板配置（名称、编码、类别、内容、适用科室、分值范围等）。
+ * 谁传给谁：前端模板管理-新增模板页面/弹窗 → `AssessmentTemplateController.addTemplate` → `AssessmentTemplateService.createTemplate`（`AssessmentTemplateServiceImpl.createTemplate`）
+ */
 import lombok.Data;
 
 import javax.validation.constraints.NotBlank;

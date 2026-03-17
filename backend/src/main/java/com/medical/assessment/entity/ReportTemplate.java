@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 报告模板实体，对应报告模板配置表。
+ * 用于定义评估结果生成正式报告时的版式、章节、样式等配置（如 PDF/WORD 报告）。
+ * 主要会被 `ReportTemplateMapper`、`ReportTemplateService`/`ReportTemplateServiceImpl`、
+ * 以及生成/管理报告模板的 `ReportTemplateController` 和报告生成相关服务调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;
 import lombok.Data;

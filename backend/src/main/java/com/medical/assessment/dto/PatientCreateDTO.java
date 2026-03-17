@@ -1,5 +1,10 @@
 package com.medical.assessment.dto;
 
+/**
+ * 患者新增请求 DTO
+ * 用途：承接“患者建档/新增患者”时提交的基本资料（姓名、性别、年龄、科室等）。
+ * 谁传给谁：前端患者管理-新增患者页面/弹窗 → `PatientController.addPatient` → `PatientService.createPatient`（`PatientServiceImpl.createPatient`）
+ */
 import lombok.Data;
 
 import javax.validation.constraints.Max;

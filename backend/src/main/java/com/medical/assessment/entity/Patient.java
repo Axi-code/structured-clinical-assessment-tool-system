@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 患者实体，对应患者基础信息表。
+ * 记录患者的身份信息、联系方式、就诊科室及诊断等，是整个评估与诊疗流程的核心主体。
+ * 主要会被 `PatientMapper`、`PatientService`/`PatientServiceImpl`、`PatientController`，
+ * 以及与患者相关的评估记录、诊疗建议、统计分析等业务模块调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;

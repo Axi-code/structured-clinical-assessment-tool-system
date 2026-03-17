@@ -41,5 +41,15 @@ public interface AssessmentRuleService extends IService<AssessmentRule> {
      * 实时计算评估结果（不保存数据）
      */
     Map<String, Object> calculateRealtime(Long templateId, Map<String, Object> assessmentData);
+
+    /**
+     * 根据 SCORE 规则静态分析模板的理论分值范围
+     */
+    Map<String, Object> calculateScoreRange(Long templateId);
+
+    /**
+     * 根据模板字段自动生成评分和风险规则（用于修复缺失规则的 AI 模板）
+     */
+    int regenerateRulesFromFields(Long templateId);
 }
 

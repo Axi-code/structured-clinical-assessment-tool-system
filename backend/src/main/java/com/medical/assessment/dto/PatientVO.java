@@ -1,5 +1,12 @@
 package com.medical.assessment.dto;
 
+/**
+ * 患者脱敏展示 VO
+ * 用途：后端返回给前端用于展示的患者信息（对姓名/证件号/电话/地址等敏感字段做脱敏）。
+ * 谁传给哪个页面：
+ * - 后端患者列表接口 → 前端患者管理列表页
+ * - 后端患者详情接口 → 前端患者详情页（展示用）
+ */
 import com.medical.assessment.entity.Patient;
 import com.medical.assessment.util.PatientDesensitizationUtil;
 import lombok.Data;
@@ -7,10 +14,6 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/**
- * 患者展示用 VO，对敏感字段进行脱敏
- * 用于列表、详情查看等场景，不包含明文敏感信息
- */
 @Data
 public class PatientVO {
 

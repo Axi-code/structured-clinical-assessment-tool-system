@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 评估字段实体，对应评估模板中的单个字段配置表。
+ * 描述字段的名称、编码、类型、标签、选项、校验规则、排序及分组，用于渲染评估表单并校验输入。
+ * 主要会被 `AssessmentFieldMapper`、`AssessmentFieldService`/`AssessmentFieldServiceImpl`、
+ * 以及模板设计/渲染相关的控制层、评估会话服务和前端表单构建逻辑调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;
 import lombok.Data;

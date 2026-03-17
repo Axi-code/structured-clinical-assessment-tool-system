@@ -16,6 +16,11 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import java.util.List;
 
+/**
+ * 前端请求来源：
+ * - 科室管理(DepartmentList.vue)：科室分页列表、新增、编辑、删除；科室下拉(list-all) 供多处使用
+ * - 用户管理(UserList.vue)、患者表单(PatientForm.vue)、患者列表(PatientList.vue)、模板表单(TemplateForm.vue)、诊断列表(DiagnosisList.vue)：科室下拉选择
+ */
 @RestController
 @RequestMapping("/department")
 public class DepartmentController {

@@ -29,6 +29,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 前端请求来源：
+ * - 登录页(Login.vue)：登录、注册、验证码、登出；全局请求刷新 Token(refresh)、获取当前用户信息(getUserInfo)
+ * - 用户管理(UserList.vue)：用户列表、新增用户、编辑用户、删除用户、修改密码
+ */
 @RestController
 @RequestMapping("/user")
 public class UserController {

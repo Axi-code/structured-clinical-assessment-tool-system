@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 评估规则实体，对应某个评估模板下的评分/风险/计算规则表。
+ * 通过规则内容与表达式，定义如何根据表单字段计算得分、风险等级或其他派生结果。
+ * 主要会被 `AssessmentRuleMapper`、`AssessmentRuleService`/`AssessmentRuleServiceImpl`、
+ * 以及实时计算接口 `AssessmentRuleController`、评估会话服务和报告生成等业务逻辑调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;
 import lombok.Data;

@@ -84,7 +84,9 @@ medical:
   encryption:
     aes-key: ${MEDICAL_ENCRYPTION_AES_KEY:DemoAesKey123456}
 
-# Qwen API配置
+#
+# Qwen API配置（通义千问）
+# 推荐使用环境变量 QWEN_API_KEY 注入真实密钥，避免写死在配置文件中
 qwen:
   api-key: ${QWEN_API_KEY:}
   api-url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation}

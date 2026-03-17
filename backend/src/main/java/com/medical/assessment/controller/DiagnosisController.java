@@ -16,6 +16,11 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import java.util.List;
 
+/**
+ * 前端请求来源：
+ * - 诊断管理(DiagnosisList.vue)：诊断分页列表、新增、编辑、删除；按科室获取诊断字典(by-department) 供诊断详情等使用
+ * - 诊断详情(DiagnosisDetail.vue)：诊断字典、诊断维护
+ */
 @RestController
 @RequestMapping("/diagnosis")
 public class DiagnosisController {

@@ -53,16 +53,50 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+          </el-row>
+          <el-row :gutter="20" align="middle">
+            <el-col :span="8">
               <el-form-item label="理论最低分" prop="minScore">
-                <el-input-number v-model="form.minScore" :precision="2" :min="0" placeholder="根据SCORE规则计算" style="width: 100%" />
+                <el-input-number v-model="form.minScore" :precision="2" :min="0" placeholder="自动计算" style="width: 100%" />
               </el-form-item>
             </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="8">
               <el-form-item label="理论最高分" prop="maxScore">
-                <el-input-number v-model="form.maxScore" :precision="2" :min="0" placeholder="根据SCORE规则计算" style="width: 100%" />
+                <el-input-number v-model="form.maxScore" :precision="2" :min="0" placeholder="自动计算" style="width: 100%" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label=" ">
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="calculatingRange"
+                    :disabled="!templateId"
+                    @click="handleCalcScoreRange"
+                  >
+                    根据规则自动计算
+                  </el-button>
+                  <el-button
+                    v-if="templateId"
+                    type="warning"
+                    plain
+                    @click="router.push({ path: '/rule', query: { templateId: templateId } })"
+                  >
+                    规则管理
+                  </el-button>
+                </div>
+                <div v-if="!templateId" class="form-tip">请先保存模板并配置评估规则后使用</div>
+                <div v-if="scoreRangeInfo" class="form-tip" style="color: #67c23a">
+                  已根据 {{ scoreRangeInfo.ruleCount }} 条评分规则（{{ scoreRangeInfo.fieldCount }} 个字段）计算
+                </div>
+                <div v-if="noRulesWarning" class="form-tip" style="color: #e6a23c">
+                  该模板暂无评分规则 —
+                  <el-button type="warning" link :loading="regenerating" @click="handleRegenerateRules">
+                    点此根据字段自动生成规则
+                  </el-button>
+                  或去「规则管理」手动配置
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -213,7 +247,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { templateApi, departmentApi } from '../../api'
+import { templateApi, departmentApi, ruleApi } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
@@ -223,6 +257,10 @@ const submitting = ref(false)
 const templateId = ref(null)
 const fields = ref([])
 const departmentList = ref([])
+const calculatingRange = ref(false)
+const scoreRangeInfo = ref(null)
+const noRulesWarning = ref(false)
+const regenerating = ref(false)
 
 // 将用户输入的选项值规范化为数组（内部再转为 JSON 字符串）
 const normalizeOptionsInput = (input) => {
@@ -412,6 +450,57 @@ const handleSubmit = async () => {
       submitting.value = false
     }
   })
+}
+
+const handleRegenerateRules = async () => {
+  if (!templateId.value) return
+  regenerating.value = true
+  try {
+    const res = await ruleApi.regenerateRules(templateId.value)
+    if (res.code === 200 && res.data) {
+      const count = res.data.createdCount || 0
+      ElMessage.success(`已自动生成 ${count} 条规则，并已更新模板的分值范围与内容字段`)
+      noRulesWarning.value = false
+      await fetchData()
+    } else {
+      ElMessage.error(res.message || '生成规则失败')
+    }
+  } catch (e) {
+    ElMessage.error('自动生成规则失败：' + (e.message || '未知错误'))
+  } finally {
+    regenerating.value = false
+  }
+}
+
+const handleCalcScoreRange = async () => {
+  if (!templateId.value) {
+    ElMessage.warning('请先保存模板并配置评估规则')
+    return
+  }
+  calculatingRange.value = true
+  scoreRangeInfo.value = null
+  noRulesWarning.value = false
+  try {
+    const res = await ruleApi.getScoreRange(templateId.value)
+    if (res.code === 200 && res.data) {
+      const { minScore, maxScore, fieldCount, ruleCount } = res.data
+      if (ruleCount === 0) {
+        noRulesWarning.value = true
+        ElMessage.warning('该模板暂无启用的 SCORE 评分规则，请先在「规则管理」中配置')
+        return
+      }
+      form.minScore = Number(minScore)
+      form.maxScore = Number(maxScore)
+      scoreRangeInfo.value = { fieldCount, ruleCount }
+      ElMessage.success(`已自动计算：最低 ${minScore} 分，最高 ${maxScore} 分`)
+    } else {
+      ElMessage.error(res.message || '计算失败')
+    }
+  } catch (e) {
+    ElMessage.error('计算分值范围失败：' + (e.message || '未知错误'))
+  } finally {
+    calculatingRange.value = false
+  }
 }
 
 const handleCreateVersion = async () => {

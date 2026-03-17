@@ -1,5 +1,12 @@
 package com.medical.assessment.dto;
 
+/**
+ * 用户信息展示 VO
+ * 用途：后端把用户信息整理成前端展示需要的结构（含科室名等冗余字段）。
+ * 谁传给哪个页面：
+ * - 后端“我的信息/个人中心”接口 → 前端个人信息页面
+ * - 后端“用户列表”接口 → 前端用户管理列表页
+ */
 import com.medical.assessment.entity.User;
 import lombok.Data;
 

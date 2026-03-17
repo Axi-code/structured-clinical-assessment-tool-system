@@ -514,8 +514,346 @@ public class AssessmentRuleServiceImpl extends ServiceImpl<AssessmentRuleMapper,
     
     @Override
     public Map<String, Object> calculateRealtime(Long templateId, Map<String, Object> assessmentData) {
-        // 实时计算，不保存数据
         return executeAllRules(templateId, assessmentData);
+    }
+
+    @Override
+    public Map<String, Object> calculateScoreRange(Long templateId) {
+        List<AssessmentRule> rules = getRulesByTemplateId(templateId);
+
+        Map<String, List<Double>> fieldScores = new LinkedHashMap<>();
+
+        for (AssessmentRule rule : rules) {
+            if (!"SCORE".equals(rule.getRuleType()) || rule.getStatus() == null || rule.getStatus() != 1) {
+                continue;
+            }
+
+            double score = extractStaticScore(rule);
+            String fieldCode = extractFieldCodeFromCondition(rule.getConditionExpression());
+            if (fieldCode == null || fieldCode.isEmpty()) {
+                fieldCode = "_unknown_" + rule.getId();
+            }
+            fieldScores.computeIfAbsent(fieldCode, k -> new ArrayList<>()).add(score);
+        }
+
+        double totalMin = 0;
+        double totalMax = 0;
+        int fieldCount = fieldScores.size();
+
+        for (Map.Entry<String, List<Double>> entry : fieldScores.entrySet()) {
+            List<Double> scores = entry.getValue();
+            double min = scores.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+            double max = scores.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+            totalMin += min;
+            totalMax += max;
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("minScore", totalMin);
+        result.put("maxScore", totalMax);
+        result.put("fieldCount", fieldCount);
+        result.put("ruleCount", rules.stream().filter(r -> "SCORE".equals(r.getRuleType()) && r.getStatus() != null && r.getStatus() == 1).count());
+        return result;
+    }
+
+    private double extractStaticScore(AssessmentRule rule) {
+        if (rule.getRuleContent() != null && !rule.getRuleContent().isEmpty()) {
+            try {
+                Map<String, Object> content = JSON.parseObject(rule.getRuleContent(), Map.class);
+                if (content.containsKey("score")) {
+                    return Double.parseDouble(content.get("score").toString());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (rule.getResultExpression() != null && !rule.getResultExpression().isEmpty()) {
+            String expr = rule.getResultExpression().trim();
+            try {
+                return Double.parseDouble(expr);
+            } catch (Exception ignored) {
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+\\.?\\d*").matcher(expr);
+            double maxFound = 0;
+            while (m.find()) {
+                try {
+                    double v = Double.parseDouble(m.group());
+                    if (v > maxFound) maxFound = v;
+                } catch (Exception ignored) {
+                }
+            }
+            return maxFound;
+        }
+        return 0;
+    }
+
+    private String extractFieldCodeFromCondition(String condition) {
+        if (condition == null || condition.isEmpty()) {
+            return null;
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\$\\{([^}]+)}").matcher(condition);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("\\$([a-zA-Z_][a-zA-Z0-9_]*)").matcher(condition);
+        if (m2.find()) {
+            return m2.group(1).trim();
+        }
+        return null;
+    }
+
+    @javax.annotation.Resource
+    private com.medical.assessment.service.AssessmentFieldService fieldService;
+
+    @org.springframework.context.annotation.Lazy
+    @javax.annotation.Resource
+    private com.medical.assessment.service.AssessmentTemplateService templateService;
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public int regenerateRulesFromFields(Long templateId) {
+        List<com.medical.assessment.entity.AssessmentField> fields = fieldService.getFieldsByTemplateId(templateId);
+        if (fields == null || fields.isEmpty()) {
+            return 0;
+        }
+
+        int priority = 1;
+        int savedCount = 0;
+
+        Map<String, Integer> severityScoreMap = new LinkedHashMap<>();
+        severityScoreMap.put("无", 0);
+        severityScoreMap.put("正常", 0);
+        severityScoreMap.put("轻微", 1);
+        severityScoreMap.put("轻", 1);
+        severityScoreMap.put("轻度", 1);
+        severityScoreMap.put("中", 3);
+        severityScoreMap.put("中度", 3);
+        severityScoreMap.put("重", 5);
+        severityScoreMap.put("重度", 5);
+        severityScoreMap.put("严重", 5);
+
+        Set<String> positiveWords = new HashSet<>(Arrays.asList("是", "有", "阳性", "存在"));
+        Set<String> negativeWords = new HashSet<>(Arrays.asList("否", "无", "阴性", "不存在"));
+
+        for (com.medical.assessment.entity.AssessmentField field : fields) {
+            String fieldCode = field.getFieldCode();
+            String fieldType = field.getFieldType();
+            if (fieldCode == null || fieldType == null) continue;
+            if ("gender".equalsIgnoreCase(fieldCode)) continue;
+
+            List<String> options = parseOptions(field.getOptions());
+
+            if (("SELECT".equals(fieldType) || "RADIO".equals(fieldType)) && options.size() >= 2) {
+                boolean isSeverity = options.stream().filter(severityScoreMap::containsKey).count() >= 2;
+                boolean isBinary = options.size() == 2
+                        && ((positiveWords.contains(options.get(0)) && negativeWords.contains(options.get(1)))
+                        || (negativeWords.contains(options.get(0)) && positiveWords.contains(options.get(1))));
+
+                for (int i = 0; i < options.size(); i++) {
+                    String opt = options.get(i);
+                    int score;
+                    if (isSeverity) {
+                        score = severityScoreMap.getOrDefault(opt, i);
+                    } else if (isBinary) {
+                        score = positiveWords.contains(opt) ? 2 : 0;
+                    } else {
+                        score = i;
+                    }
+                    if (score == 0) continue;
+
+                    AssessmentRule rule = new AssessmentRule();
+                    rule.setTemplateId(templateId);
+                    rule.setRuleName(fieldCode + "=" + opt + " 得" + score + "分");
+                    rule.setRuleCode("SCORE_" + fieldCode + "_" + priority);
+                    rule.setRuleType("SCORE");
+                    rule.setConditionExpression("${" + fieldCode + "} == '" + opt.replace("'", "\\'") + "'");
+                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                    content.put("score", score);
+                    rule.setRuleContent(content.toJSONString());
+                    rule.setPriority(priority++);
+                    rule.setStatus(1);
+                    rule.setRemark("自动生成评分规则");
+                    rule.setCreateTime(java.time.LocalDateTime.now());
+                    rule.setUpdateTime(java.time.LocalDateTime.now());
+                    rule.setDeleted(0);
+                    save(rule);
+                    savedCount++;
+                }
+            } else if ("NUMBER".equals(fieldType) && "age".equalsIgnoreCase(fieldCode)) {
+                int[][] ranges = {{0, 40, 0}, {40, 65, 1}, {65, 200, 3}};
+                for (int[] r : ranges) {
+                    if (r[2] == 0) continue;
+                    AssessmentRule rule = new AssessmentRule();
+                    rule.setTemplateId(templateId);
+                    rule.setRuleName("age [" + r[0] + "-" + r[1] + ") 得" + r[2] + "分");
+                    rule.setRuleCode("SCORE_age_" + priority);
+                    rule.setRuleType("SCORE");
+                    rule.setConditionExpression("${age} >= " + r[0] + " && ${age} < " + r[1]);
+                    com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+                    content.put("score", r[2]);
+                    rule.setRuleContent(content.toJSONString());
+                    rule.setPriority(priority++);
+                    rule.setStatus(1);
+                    rule.setRemark("自动生成评分规则");
+                    rule.setCreateTime(java.time.LocalDateTime.now());
+                    rule.setUpdateTime(java.time.LocalDateTime.now());
+                    rule.setDeleted(0);
+                    save(rule);
+                    savedCount++;
+                }
+            }
+        }
+
+        int maxPossible = Math.max(savedCount > 0 ? savedCount * 3 : 20, 10);
+        int lowT = Math.max(1, (int) Math.ceil(maxPossible * 0.3));
+        int highT = Math.max(lowT + 1, (int) Math.ceil(maxPossible * 0.6));
+        String[][] riskDefs = {
+                {"0", String.valueOf(lowT), "低风险", "暂无明显风险，建议常规随访"},
+                {String.valueOf(lowT), String.valueOf(highT), "中风险", "建议进一步检查以明确病因"},
+                {String.valueOf(highT), "999", "高风险", "建议尽快就医，采取针对性治疗措施"}
+        };
+        for (String[] rd : riskDefs) {
+            String condition = Integer.parseInt(rd[1]) >= 999
+                    ? "totalScore >= " + rd[0]
+                    : "totalScore >= " + rd[0] + " && totalScore < " + rd[1];
+            AssessmentRule rule = new AssessmentRule();
+            rule.setTemplateId(templateId);
+            rule.setRuleName("风险等级-" + rd[2]);
+            rule.setRuleCode("RISK_" + priority);
+            rule.setRuleType("RISK");
+            rule.setConditionExpression(condition);
+            com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+            content.put("riskLevel", rd[2]);
+            content.put("riskTip", rd[3]);
+            rule.setRuleContent(content.toJSONString());
+            rule.setPriority(priority++);
+            rule.setStatus(1);
+            rule.setRemark("自动生成风险规则");
+            rule.setCreateTime(java.time.LocalDateTime.now());
+            rule.setUpdateTime(java.time.LocalDateTime.now());
+            rule.setDeleted(0);
+            save(rule);
+            savedCount++;
+        }
+
+        if (savedCount > 0) {
+            updateTemplateContentAndScores(templateId, fields);
+        }
+
+        return savedCount;
+    }
+
+    private void updateTemplateContentAndScores(Long templateId, List<com.medical.assessment.entity.AssessmentField> fields) {
+        com.medical.assessment.entity.AssessmentTemplate template = templateService.getById(templateId);
+        if (template == null) return;
+
+        Map<String, Object> rangeResult = calculateScoreRange(templateId);
+        double minScore = ((Number) rangeResult.getOrDefault("minScore", 0)).doubleValue();
+        double maxScore = ((Number) rangeResult.getOrDefault("maxScore", 0)).doubleValue();
+        template.setMinScore(java.math.BigDecimal.valueOf(minScore));
+        template.setMaxScore(java.math.BigDecimal.valueOf(maxScore));
+
+        com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
+        content.put("category", template.getCategory());
+        content.put("description", template.getDescription() != null ? template.getDescription() : "");
+
+        com.alibaba.fastjson2.JSONArray fieldsArr = new com.alibaba.fastjson2.JSONArray();
+        for (com.medical.assessment.entity.AssessmentField f : fields) {
+            com.alibaba.fastjson2.JSONObject fo = new com.alibaba.fastjson2.JSONObject();
+            fo.put("fieldCode", f.getFieldCode());
+            fo.put("fieldLabel", f.getFieldLabel());
+            fo.put("fieldType", f.getFieldType());
+            fo.put("required", f.getRequired() != null ? f.getRequired() : 0);
+            fo.put("options", parseOptions(f.getOptions()));
+            fieldsArr.add(fo);
+        }
+        content.put("fields", fieldsArr);
+        content.put("scoringRules", buildScoringRulesJson(templateId));
+        content.put("riskRules", buildRiskRulesJson(templateId));
+
+        template.setTemplateContent(content.toJSONString());
+        template.setUpdateTime(java.time.LocalDateTime.now());
+        templateService.updateById(template);
+    }
+
+    private com.alibaba.fastjson2.JSONArray buildScoringRulesJson(Long templateId) {
+        Map<String, com.alibaba.fastjson2.JSONObject> byField = new LinkedHashMap<>();
+        for (AssessmentRule r : getRulesByTemplateId(templateId)) {
+            if (!"SCORE".equals(r.getRuleType()) || r.getRuleContent() == null) continue;
+            try {
+                com.alibaba.fastjson2.JSONObject rc = com.alibaba.fastjson2.JSON.parseObject(r.getRuleContent());
+                if (!rc.containsKey("score")) continue;
+                String fieldCode = extractFieldCodeFromCondition(r.getConditionExpression());
+                if (fieldCode == null) continue;
+
+                com.alibaba.fastjson2.JSONObject sr = byField.computeIfAbsent(fieldCode, k -> {
+                    com.alibaba.fastjson2.JSONObject o = new com.alibaba.fastjson2.JSONObject();
+                    o.put("fieldCode", k);
+                    return o;
+                });
+
+                if (r.getConditionExpression() != null && r.getConditionExpression().contains("==")) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("==\\s*'([^']*)'").matcher(r.getConditionExpression());
+                    if (m.find()) {
+                        com.alibaba.fastjson2.JSONObject scoreMap = sr.getJSONObject("scoreMap");
+                        if (scoreMap == null) {
+                            scoreMap = new com.alibaba.fastjson2.JSONObject();
+                            sr.put("scoreMap", scoreMap);
+                        }
+                        scoreMap.put(m.group(1), rc.get("score"));
+                    }
+                } else if (r.getConditionExpression() != null && r.getConditionExpression().contains(">=")) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile(">=\\s*(\\d+).*?<\\s*(\\d+)").matcher(r.getConditionExpression());
+                    if (m.find()) {
+                        com.alibaba.fastjson2.JSONArray ranges = sr.getJSONArray("ranges");
+                        if (ranges == null) {
+                            ranges = new com.alibaba.fastjson2.JSONArray();
+                            sr.put("ranges", ranges);
+                        }
+                        com.alibaba.fastjson2.JSONObject range = new com.alibaba.fastjson2.JSONObject();
+                        range.put("min", Integer.parseInt(m.group(1)));
+                        range.put("max", Integer.parseInt(m.group(2)));
+                        range.put("score", rc.get("score"));
+                        ranges.add(range);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return new com.alibaba.fastjson2.JSONArray(byField.values());
+    }
+
+    private com.alibaba.fastjson2.JSONArray buildRiskRulesJson(Long templateId) {
+        com.alibaba.fastjson2.JSONArray arr = new com.alibaba.fastjson2.JSONArray();
+        for (AssessmentRule r : getRulesByTemplateId(templateId)) {
+            if (!"RISK".equals(r.getRuleType()) || r.getRuleContent() == null) continue;
+            try {
+                com.alibaba.fastjson2.JSONObject rc = com.alibaba.fastjson2.JSON.parseObject(r.getRuleContent());
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("totalScore >= (\\d+)(?: && totalScore < (\\d+))?").matcher(r.getConditionExpression() != null ? r.getConditionExpression() : "");
+                if (m.find()) {
+                    com.alibaba.fastjson2.JSONObject rr = new com.alibaba.fastjson2.JSONObject();
+                    rr.put("minScore", Integer.parseInt(m.group(1)));
+                    rr.put("maxScore", m.group(2) != null ? Integer.parseInt(m.group(2)) : 999);
+                    rr.put("riskLevel", rc.get("riskLevel"));
+                    rr.put("riskTip", rc.get("riskTip") != null ? rc.get("riskTip") : "");
+                    arr.add(rr);
+                }
+            } catch (Exception ignored) {}
+        }
+        return arr;
+    }
+
+    private List<String> parseOptions(String optionsRaw) {
+        if (optionsRaw == null || optionsRaw.trim().isEmpty()) return Collections.emptyList();
+        try {
+            List<String> arr = com.alibaba.fastjson2.JSON.parseArray(optionsRaw, String.class);
+            if (arr != null && !arr.isEmpty()) return arr;
+        } catch (Exception ignored) {}
+        String[] parts = optionsRaw.split("[,，、]");
+        List<String> result = new ArrayList<>();
+        for (String p : parts) {
+            String v = p.trim();
+            if (!v.isEmpty()) result.add(v);
+        }
+        return result;
     }
 }
 

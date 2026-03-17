@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 诊疗建议记录实体，对应基于评估结果生成的诊疗建议表。
+ * 记录针对某次评估/某个患者生成的具体诊疗建议内容及生成者信息，用于临床决策与随访。
+ * 主要会被 `TreatmentSuggestionMapper`、`TreatmentSuggestionService`/`TreatmentSuggestionServiceImpl`、
+ * 以及 `TreatmentSuggestionController` 和评估/AI 建议生成相关业务逻辑调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;
 import lombok.Data;

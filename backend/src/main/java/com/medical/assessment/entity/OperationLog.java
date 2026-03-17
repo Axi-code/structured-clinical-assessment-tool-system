@@ -1,5 +1,11 @@
 package com.medical.assessment.entity;
 
+/**
+ * 操作日志实体，对应系统操作审计日志表。
+ * 用于记录用户在系统中的关键操作（模块、动作、目标对象、IP 等），方便审计与问题追溯。
+ * 主要会被 `OperationLogMapper`、`OperationLogService`/`OperationLogServiceImpl`、
+ * 以及提供日志查询能力的 `OperationLogController` 和 AOP 切面（如操作日志切面）调用。
+ */
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medical.assessment.common.BaseEntity;
 import lombok.Data;

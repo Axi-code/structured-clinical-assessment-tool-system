@@ -1,3 +1,9 @@
+/**
+ * 前端请求来源：
+ * - 首页(Dashboard.vue)：仪表盘统计(dashboard)、概览等
+ * - 统计页(StatisticsDashboard.vue)：按时间/科室/模板/风险等级统计、指标趋势、指标分布、综合概览、风险预警
+ */
+
 package com.medical.assessment.controller;
 
 import com.medical.assessment.annotation.RequiresRoles;
@@ -11,9 +17,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 数据统计控制器
- */
 @RestController
 @RequestMapping("/statistics")
 public class StatisticsController {

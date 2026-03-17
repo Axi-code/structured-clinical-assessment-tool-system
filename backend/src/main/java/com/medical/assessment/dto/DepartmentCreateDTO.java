@@ -1,5 +1,10 @@
 package com.medical.assessment.dto;
 
+/**
+ * 科室新增请求 DTO
+ * 用途：承接“新增科室”时提交的科室信息（名称、编码、排序、备注）。
+ * 谁传给谁：前端科室管理-新增科室页面/弹窗 → `DepartmentController.add` → `DepartmentService.createDepartment`（`DepartmentServiceImpl.createDepartment`）
+ */
 import lombok.Data;
 
 import javax.validation.constraints.NotBlank;

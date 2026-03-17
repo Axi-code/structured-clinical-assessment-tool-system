@@ -15,10 +15,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 前端请求来源：
+ * - 评估规则(RuleList.vue)：规则列表、启用/停用、删除；规则表单(RuleForm.vue)：规则新增/编辑、测试规则
+ * - 评估表单(AssessmentForm.vue)：按模板获取规则、实时计算(calculateRealtime)
+ */
 @RestController
 @RequestMapping("/assessment-rule")
 public class AssessmentRuleController {
-    
+
     @Autowired
     private AssessmentRuleService ruleService;
     
@@ -237,6 +242,40 @@ public class AssessmentRuleController {
         }
     }
     
+    /**
+     * 根据模板字段自动生成评分和风险规则（修复缺失规则的模板）
+     */
+    @PostMapping("/regenerate/{templateId}")
+    @RequiresRoles({"ADMIN", "DOCTOR"})
+    public Result<Map<String, Object>> regenerateRules(@PathVariable Long templateId) {
+        try {
+            List<AssessmentRule> existing = ruleService.getRulesByTemplateId(templateId);
+            if (!existing.isEmpty()) {
+                return Result.error("该模板已有 " + existing.size() + " 条规则，如需重新生成请先删除现有规则");
+            }
+            int count = ruleService.regenerateRulesFromFields(templateId);
+            Map<String, Object> data = new java.util.HashMap<>();
+            data.put("createdCount", count);
+            return Result.success(data);
+        } catch (Exception e) {
+            return Result.error("自动生成规则失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 根据 SCORE 规则计算模板的理论分值范围（minScore / maxScore）
+     */
+    @GetMapping("/score-range/{templateId}")
+    @RequiresRoles({"ADMIN", "DOCTOR"})
+    public Result<Map<String, Object>> getScoreRange(@PathVariable Long templateId) {
+        try {
+            Map<String, Object> range = ruleService.calculateScoreRange(templateId);
+            return Result.success(range);
+        } catch (Exception e) {
+            return Result.error("计算分值范围失败: " + e.getMessage());
+        }
+    }
+
     /**
      * 测试规则请求对象
      */

@@ -1,3 +1,10 @@
+/**
+ * 前端请求来源：
+ * - 诊断详情(DiagnosisDetail.vue)：表格内诊疗建议的生成、重新生成、按记录/患者获取、删除
+ * - 评估历史(AssessmentHistory.vue)、评估表单(AssessmentForm.vue)：诊疗建议生成与查看
+ * - 诊疗建议历史(SuggestionHistory.vue)：按患者分页查询、删除
+ */
+
 package com.medical.assessment.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -14,9 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
-/**
- * 诊疗建议控制器
- */
 @RestController
 @RequestMapping("/treatment-suggestion")
 public class TreatmentSuggestionController {

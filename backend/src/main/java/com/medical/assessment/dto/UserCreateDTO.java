@@ -1,5 +1,12 @@
 package com.medical.assessment.dto;
 
+/**
+ * 用户新增请求 DTO
+ * 用途：承接“注册/新增用户”时提交的用户信息（账号、密码、姓名、角色、科室等）。
+ * 谁传给谁：
+ * - 前端注册页面 → `UserController.register` → `UserService.register`（`UserServiceImpl.register`）
+ * - 前端用户管理-新增用户弹窗/页面 → `UserController.addUser` → `UserService.register`（复用同一套创建逻辑）
+ */
 import lombok.Data;
 
 import javax.validation.constraints.Email;

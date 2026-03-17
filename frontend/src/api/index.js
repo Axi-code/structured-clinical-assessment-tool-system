@@ -125,7 +125,9 @@ export const ruleApi = {
   deleteRule: (id) => request.delete(`/assessment-rule/${id}`),
   updateRuleStatus: (id, status) => request.put(`/assessment-rule/${id}/status`, null, { params: { status } }),
   testRule: (data) => request.post('/assessment-rule/test', data),
-  calculateRealtime: (data) => request.post('/assessment-rule/calculate-realtime', data)
+  calculateRealtime: (data) => request.post('/assessment-rule/calculate-realtime', data),
+  getScoreRange: (templateId) => request.get(`/assessment-rule/score-range/${templateId}`),
+  regenerateRules: (templateId) => request.post(`/assessment-rule/regenerate/${templateId}`)
 }
 
 // 科室相关API

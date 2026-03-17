@@ -1,3 +1,8 @@
+/**
+ * 前端请求来源：
+ * - 报告模板管理（前端 api 已封装 reportTemplateApi，用于报告模板列表、按评估模板获取、详情、创建/更新/删除、设置默认、状态更新；若存在报告模板配置页则从该页发起请求）
+ */
+
 package com.medical.assessment.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;

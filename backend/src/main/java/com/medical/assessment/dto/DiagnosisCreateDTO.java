@@ -1,5 +1,12 @@
 package com.medical.assessment.dto;
 
+/**
+ * 诊断新增请求 DTO
+ * 用途：承接“新增诊断/维护诊断字典”时提交的诊断信息（名称、科室、ICD 等）。
+ * 谁传给谁：
+ * - 前端诊断管理-新增诊断页面/弹窗 → `DiagnosisController.add` → `DiagnosisService.createDiagnosis`（`DiagnosisServiceImpl.createDiagnosis`）
+ * - 前端患者详情页采纳 AI 诊断（若库中不存在）→ 后端在 `PatientController.adoptLatestAiDiagnosis` 内部组装该 DTO 并调用创建逻辑
+ */
 import lombok.Data;
 
 import javax.validation.constraints.NotBlank;

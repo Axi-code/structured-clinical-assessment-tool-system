@@ -1,5 +1,10 @@
 package com.medical.assessment.dto;
 
+/**
+ * 患者明细编辑 VO
+ * 用途：后端返回给前端用于“编辑患者”表单回显的完整数据（通常不做脱敏）。
+ * 谁传给哪个页面：后端获取患者编辑详情接口 → 前端患者管理-编辑患者页面
+ */
 import com.medical.assessment.entity.Patient;
 import lombok.Data;
 
