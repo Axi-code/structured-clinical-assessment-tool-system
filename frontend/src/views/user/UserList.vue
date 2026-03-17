@@ -4,7 +4,9 @@
       <template #header>
         <div class="card-header">
           <span>用户列表</span>
-          <el-button type="primary" @click="handleAdd">新增用户</el-button>
+          <div>
+            <el-button type="primary" @click="handleAdd">新增用户</el-button>
+          </div>
         </div>
       </template>
       
@@ -141,7 +143,7 @@ const fetchData = async () => {
       current: pagination.current,
       size: pagination.size,
       ...searchForm
-    })
+    }, { silent: true })
     tableData.value = res.data.records || []
     pagination.total = res.data.total || 0
   } catch (error) {
@@ -271,7 +273,7 @@ const handleCurrentChange = () => {
 
 const loadDepartments = async () => {
   try {
-    const res = await departmentApi.listAll()
+    const res = await departmentApi.listAll({ silent: true })
     departmentList.value = res.data || []
   } catch (e) {
     ElMessage.error('加载科室列表失败')

@@ -17,7 +17,7 @@ import java.time.LocalDate;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("patient")
+@TableName(value = "patient", autoResultMap = true)
 public class Patient extends BaseEntity {
     private String patientNo; // 患者编号
     private String name;

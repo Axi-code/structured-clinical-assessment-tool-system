@@ -3,7 +3,10 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>{{ recordId ? '编辑评估' : '创建评估' }}</span>
+          <div class="card-header-left">
+            <el-button @click="handleGoBack" :icon="ArrowLeft">返回</el-button>
+            <span class="card-title">{{ recordId ? '编辑评估' : '创建评估' }}</span>
+          </div>
           <div>
             <el-button @click="handleSaveDraft" :loading="saving">保存草稿</el-button>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">提交评估</el-button>
@@ -11,6 +14,32 @@
         </div>
       </template>
       
+      <!-- 提交失败提示横幅 -->
+      <el-alert
+        v-if="submitError"
+        :title="'提交失败：' + submitError"
+        type="error"
+        show-icon
+        :closable="false"
+        style="margin-bottom: 16px"
+      >
+        <template #default>
+          <div style="margin-top: 8px">
+            <el-button
+              v-if="assessmentMode !== 'FORM'"
+              type="warning"
+              size="small"
+              @click="switchToFormForFix"
+            >
+              切换到表单模式修正数据
+            </el-button>
+            <span v-if="assessmentMode !== 'FORM'" style="margin-left: 8px; color: #909399; font-size: 12px">
+              切换后可手动修改不合法的字段值
+            </span>
+          </div>
+        </template>
+      </el-alert>
+
       <el-form
         ref="formRef"
         :model="form"
@@ -259,6 +288,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { assessmentApi, patientApi, templateApi, ruleApi, treatmentSuggestionApi, assessmentConversationApi } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -299,6 +329,7 @@ const conversationLoading = ref(false)
 const conversationCompletion = ref(0)
 const conversationMissingFields = ref([])
 const conversationNeedClarify = ref(false)
+const submitError = ref('')
 
 const searchPatients = async (query) => {
   if (query) {
@@ -490,6 +521,45 @@ const handleSendChat = async () => {
   }
 }
 
+const handleGoBack = async () => {
+  const hasData = fields.value.length > 0 && Object.keys(form.assessmentData).some(k => {
+    const v = form.assessmentData[k]
+    return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)
+  })
+  if (hasData) {
+    try {
+      await ElMessageBox.confirm('当前评估数据尚未提交，确定要离开吗？', '提示', {
+        confirmButtonText: '确定离开',
+        cancelButtonText: '继续评估',
+        type: 'warning'
+      })
+    } catch {
+      return
+    }
+  }
+  router.back()
+}
+
+const sanitizeAssessmentData = () => {
+  if (!fields.value || fields.value.length === 0) return
+  for (const field of fields.value) {
+    if (field.fieldType !== 'SELECT' && field.fieldType !== 'RADIO') continue
+    const value = form.assessmentData[field.fieldCode]
+    if (value === null || value === undefined || value === '') continue
+    const options = parseOptions(field.options)
+    if (options.length > 0 && !options.includes(String(value))) {
+      form.assessmentData[field.fieldCode] = ''
+    }
+  }
+}
+
+const switchToFormForFix = () => {
+  sanitizeAssessmentData()
+  assessmentMode.value = 'FORM'
+  submitError.value = ''
+  ElMessage.info('已切换到表单模式，请检查并修正标红的字段后重新提交')
+}
+
 const handleFinalizeConversation = async () => {
   if (!form.patientId) {
     ElMessage.warning('请先选择患者')
@@ -499,8 +569,10 @@ const handleFinalizeConversation = async () => {
     ElMessage.warning(assessmentMode.value === 'CHAT_AUTO' ? '请先让AI生成模板' : '请先选择模板')
     return
   }
+  submitError.value = ''
   submitting.value = true
   try {
+    sanitizeAssessmentData()
     const res = await assessmentConversationApi.finalizeConversation({
       patientId: form.patientId,
       templateId: form.templateId,
@@ -510,7 +582,9 @@ const handleFinalizeConversation = async () => {
     ElMessage.success('对话评估提交成功')
     await showSuggestionDialog()
   } catch (error) {
-    ElMessage.error(error.message || '提交失败')
+    const msg = error.message || '提交失败'
+    submitError.value = msg
+    ElMessage.error(msg)
   } finally {
     submitting.value = false
   }
@@ -702,6 +776,7 @@ const handleSubmit = async () => {
     ElMessage.warning('请先选择患者和模板')
     return
   }
+  submitError.value = ''
   
   await formRef.value.validate(async (valid) => {
     if (valid) {
@@ -723,7 +798,9 @@ const handleSubmit = async () => {
 
         await showSuggestionDialog()
       } catch (error) {
-        ElMessage.error(error.message || '提交评估失败')
+        const msg = error.message || '提交评估失败'
+        submitError.value = msg
+        ElMessage.error(msg)
       } finally {
         submitting.value = false
       }
@@ -837,6 +914,17 @@ const handleCopySuggestion = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .result-card {

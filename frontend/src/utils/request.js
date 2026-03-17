@@ -32,7 +32,7 @@ request.interceptors.response.use(
     if (res.code === 200) {
       return res
     }
-    ElMessage.error(msg)
+    if (!response.config?.silent) ElMessage.error(msg)
     const err = new Error(msg)
     err.code = res.code
     err.message = msg
@@ -70,7 +70,7 @@ request.interceptors.response.use(
 
     if (error.response) {
       const msg = error.response.data?.msg || error.response.data?.message || '请求失败'
-      if (error.response.status !== 401) ElMessage.error(msg)
+      if (error.response.status !== 401 && !error.config?.silent) ElMessage.error(msg)
       const err = new Error(msg)
       err.code = error.response.data?.code
       err.message = msg

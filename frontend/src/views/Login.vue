@@ -153,6 +153,7 @@ function refreshCaptcha() {
 }
 
 const handleLogin = async () => {
+  if (loading.value) return
   if (needCaptcha.value) {
     loginForm.captchaKey = captchaKey.value
   }
@@ -160,10 +161,13 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        const payload = { username: loginForm.username, password: loginForm.password }
+        const payload = {
+          username: String(loginForm.username || '').trim(),
+          password: String(loginForm.password || '').trim()
+        }
         if (needCaptcha.value) {
           payload.captchaKey = loginForm.captchaKey
-          payload.captchaCode = loginForm.captchaCode
+          payload.captchaCode = String(loginForm.captchaCode || '').trim()
         }
         await userStore.login(payload)
         ElMessage.success('登录成功')

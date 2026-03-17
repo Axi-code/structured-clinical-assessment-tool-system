@@ -71,15 +71,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public LoginVO login(LoginDTO loginDTO) {
+        String username = loginDTO.getUsername() != null ? loginDTO.getUsername().trim() : "";
+        String password = loginDTO.getPassword() != null ? loginDTO.getPassword().trim() : "";
         User user = this.getOne(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, loginDTO.getUsername())
+                .eq(User::getUsername, username)
                 .eq(User::getDeleted, 0));
 
         if (user == null) {
             throw new BusinessException("用户名或密码错误");
         }
 
-        if (!matchesPassword(loginDTO.getPassword(), user.getPassword())) {
+        if (!matchesPassword(password, user.getPassword())) {
             throw new BusinessException("用户名或密码错误");
         }
 
@@ -89,7 +91,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 若仍为 MD5 存储，首次登录成功时迁移为 BCrypt 并写回（使用 LambdaUpdateWrapper 确保写库生效）
         if (!isBcryptHash(user.getPassword())) {
-            String newEncoded = passwordEncoder.encode(loginDTO.getPassword());
+            String newEncoded = passwordEncoder.encode(password);
             LambdaUpdateWrapper<User> updateWrapper = new LambdaUpdateWrapper<>();
             updateWrapper.eq(User::getId, user.getId())
                     .set(User::getPassword, newEncoded)

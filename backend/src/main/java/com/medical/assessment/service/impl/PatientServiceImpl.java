@@ -14,6 +14,7 @@ import com.medical.assessment.mapper.PatientMapper;
 import com.medical.assessment.service.PatientService;
 import com.medical.assessment.service.DepartmentService;
 import com.medical.assessment.service.DiagnosisService;
+import com.medical.assessment.util.AesEncryptionUtil;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -155,13 +156,21 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
         patient.setGender(source.getGender());
         patient.setBirthDate(source.getBirthDate());
         patient.setAge(source.getAge());
-        patient.setIdCard(source.getIdCard());
-        patient.setPhone(source.getPhone());
-        patient.setAddress(source.getAddress());
-        patient.setEmergencyContact(source.getEmergencyContact());
-        patient.setEmergencyPhone(source.getEmergencyPhone());
+        patient.setIdCard(encryptIfPresent(source.getIdCard()));
+        patient.setPhone(encryptIfPresent(source.getPhone()));
+        patient.setAddress(encryptIfPresent(source.getAddress()));
+        patient.setEmergencyContact(encryptIfPresent(source.getEmergencyContact()));
+        patient.setEmergencyPhone(encryptIfPresent(source.getEmergencyPhone()));
         patient.setDepartmentId(source.getDepartmentId());
         patient.setRemark(source.getRemark());
+    }
+
+    /** 敏感字段落库前加密，MyBatis-Plus @TableField(typeHandler) 在 INSERT/UPDATE 时不生效，需在 Service 层手动加密 */
+    private static String encryptIfPresent(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return value;
+        }
+        return AesEncryptionUtil.encrypt(value);
     }
 
     private void clearDiagnosisIfDepartmentChanged(Patient patient) {

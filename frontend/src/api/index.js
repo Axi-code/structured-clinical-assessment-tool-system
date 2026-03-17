@@ -2,13 +2,13 @@ import request from '../utils/request'
 
 // 用户相关API
 export const userApi = {
-  login: (data) => request.post('/user/login', data),
+  login: (data) => request.post('/user/login', data, { silent: true }),
   refresh: () => request.post('/user/refresh'),
   logout: () => request.post('/user/logout'),
   getCaptcha: () => request.get('/user/captcha'),
   register: (data) => request.post('/user/register', data),
   getUserInfo: () => request.get('/user/info'),
-  getUserList: (params) => request.get('/user/list', { params }),
+  getUserList: (params, config = {}) => request.get('/user/list', { params, ...config }),
   addUser: (data) => request.post('/user/add', data),
   updateUser: (data) => request.put('/user/update', data),
   deleteUser: (id) => request.delete(`/user/delete/${id}`),
@@ -132,7 +132,7 @@ export const ruleApi = {
 
 // 科室相关API
 export const departmentApi = {
-  listAll: () => request.get('/department/list-all'),
+  listAll: (config = {}) => request.get('/department/list-all', config),
   getPage: (params) => request.get('/department/page', { params }),
   add: (data) => request.post('/department/add', data),
   update: (data) => request.put('/department/update', data),
