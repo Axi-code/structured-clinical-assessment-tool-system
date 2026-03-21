@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 评估数据全局流转v
+## 1. 评估数据全局流转
 
 用户操作产出 `assessmentData`，经后端校验、规则引擎计算后将评估结果落库的完整端到端链路。
 
@@ -121,7 +121,7 @@ sequenceDiagram
         F->>B: POST /assessment-conversation/reply
         B->>LLM: prompt = 对话历史 + 缺失字段 + 本轮回答
         LLM-->>B: JSON: mapped_data_delta + assistant_question + need_clarify + clarify_question + completion
-        Note over B: need_clarify=true 时：不强制补底，用 clarify_question 追问；<br/>否则：强制补底兜底填入
+        Note over B: need_clarify 时用 clarify_question 追问，否则强制补底兜底填入
         B->>B: 合并 delta → currentData
         B->>B: 状态机推进 → 找下一个缺失字段
         opt 实时计算
@@ -176,7 +176,7 @@ flowchart TD
     A --> B --> C --> D --> E
     E -->|是| G
     E -->|否| CL
-    CL -->|是| SK --> G
+    CL -->|是| SK --> L --> N
     CL -->|否| F --> F1
     F1 -->|≤10 字| F2 --> G
     F1 -->|含否定词| F3 --> G

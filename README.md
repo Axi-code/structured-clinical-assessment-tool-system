@@ -9,6 +9,287 @@
 
 ---
 
+## 系统架构图
+
+系统采用前后端分离架构，前端通过 REST API 与后端交互，后端连接 MySQL、Redis 及外部 Qwen 大模型服务。
+
+```mermaid
+flowchart TB
+    subgraph 用户端
+        Browser[浏览器]
+    end
+
+    subgraph 前端层["前端 (Vue 3 + Vite)"]
+        Vue[Vue 3 应用]
+        Router[Vue Router]
+        Pinia[Pinia 状态]
+        Element[Element Plus]
+        Vue --> Router
+        Vue --> Pinia
+        Vue --> Element
+    end
+
+    subgraph 后端层["后端 (Spring Boot)"]
+        Controller[Controller 层]
+        Service[Service 层]
+        Mapper[Mapper 层]
+        AOP[AOP 日志/鉴权]
+        Controller --> Service
+        Service --> Mapper
+        AOP -.-> Controller
+    end
+
+    subgraph 数据层["数据与外部服务"]
+        MySQL[(MySQL 8)]
+        Redis[(Redis)]
+        Qwen[Qwen 大模型 API]
+    end
+
+    Browser <-->|HTTP/HTTPS| Vue
+    Vue <-->|REST API /api/*| Controller
+    Mapper <-->|MyBatis-Plus| MySQL
+    Service <-->|Refresh Token / Sa-Token| Redis
+    Service -->|诊疗建议/模板推荐/对话评估| Qwen
+```
+
+| 层级  | 组件                          | 职责                           |
+| --- | --------------------------- | ---------------------------- |
+| 用户端 | 浏览器                         | 访问前端页面，发起请求                  |
+| 前端层 | Vue 3 + Vite + Element Plus | 页面渲染、路由、状态管理、接口调用            |
+| 后端层 | Spring Boot + MyBatis-Plus  | REST API、业务逻辑、数据持久化、鉴权与日志    |
+| 数据层 | MySQL                       | 业务数据存储                       |
+| 数据层 | Redis                       | Refresh Token、Sa-Token 会话持久化 |
+| 数据层 | Qwen API                    | AI 诊疗建议、对话式评估、模板推荐           |
+
+## 核心工作流程
+
+### 患者评估与诊断确认流程
+
+从患者建档到评估完成、AI 诊断回填及医生确认的完整流程。
+
+```mermaid
+flowchart TD
+    A[患者建档] --> B[选择患者与模板]
+    B --> C{评估模式}
+    C -->|表单模式| D[填写评估表单]
+    C -->|对话模式| E[AI 对话式采集]
+    D --> F[提交评估]
+    E --> F
+    F --> G[规则/AI 计算评估结果]
+    G --> H[AI 产出 diagnosisName]
+    H --> I{诊断字典匹配}
+    I -->|匹配成功| J[自动回填患者当前诊断]
+    I -->|未匹配| K[高亮 AI 建议诊断]
+    J --> L[医生可确认/修正]
+    K --> M[一键加入诊断字典并采用]
+    M --> J
+    L --> N[完成]
+```
+
+### 诊断字典与 AI 联动流程
+
+```mermaid
+flowchart LR
+    subgraph 评估完成
+        A1[评估提交] --> A2[AI 计算]
+        A2 --> A3[产出 diagnosisName]
+    end
+
+    subgraph 自动匹配
+        A3 --> B1{科室诊断字典}
+        B1 -->|精确/模糊匹配| B2[匹配成功]
+        B1 -->|无匹配| B3[未匹配]
+        B2 --> B4[更新 patient.diagnosis_id]
+    end
+
+    subgraph 医生操作
+        B3 --> C1[诊断详情页高亮提示]
+        C1 --> C2[点击 加入诊断字典并采用]
+        C2 --> C3[新建诊断字典项]
+        C3 --> B4
+    end
+```
+
+### 登录与会话续期流程
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant F as 前端
+    participant B as 后端
+    participant R as Redis
+
+    U->>F: 输入账号密码
+    F->>B: POST /user/login
+    B->>B: 校验验证码/限流
+    B->>B: 校验密码
+    B->>R: 存储 Refresh Token
+    B-->>F: Access Token + Set-Cookie
+    F->>F: 存储 Token，跳转首页
+
+    loop 后续请求
+        F->>B: Authorization: Bearer {token}
+        B->>B: 校验 Access Token
+        alt Token 有效
+            B-->>F: 正常响应
+        else Token 过期 401
+            F->>B: POST /user/refresh (带 Cookie)
+            B->>R: 校验 Refresh Token
+            B-->>F: 新 Access Token
+            F->>B: 重试原请求
+        end
+    end
+```
+
+## 核心数据流图
+
+### 对话式评估与 LLM 结构化解析
+
+AI 通过多轮对话采集评估数据，每轮由 LLM 解析用户回答为 `mapped_data_delta` 增量数据并合并，最终走同一套规则引擎计算。
+
+```mermaid
+sequenceDiagram
+    actor U as 患者 / 医生
+    participant F as 前端
+    participant B as 后端
+    participant LLM as 通义千问
+    participant DB as 数据库
+
+    U->>F: 选择患者，开始对话评估
+    F->>B: POST /assessment-conversation/start
+    B-->>F: 首轮提问（第一个缺失必填字段）
+
+    loop 多轮对话采集
+        U->>F: 自然语言回答（如「睡不好」「无」）
+        F->>B: POST /assessment-conversation/reply
+        B->>LLM: prompt = 对话历史 + 缺失字段 + 本轮回答
+        LLM-->>B: JSON: mapped_data_delta + assistant_question + need_clarify + clarify_question + completion
+        Note over B: need_clarify 时用 clarify_question 追问，否则强制补底兜底填入
+        B->>B: 合并 delta → currentData
+        B->>B: 状态机推进 → 找下一个缺失字段
+        opt 实时计算
+            B->>B: executeAllRules（不落库）
+        end
+        B-->>F: assistantMessage + mappedData + completion
+        F-->>U: 展示 AI 提问 + 实时评分预览
+    end
+
+    U->>F: 结束对话并提交
+    F->>B: POST /assessment-conversation/finalize
+    B->>DB: 创建 assessment_record（status=1）
+    B->>B: executeAllRules → 计算结果
+    opt 规则引擎完成后
+        B->>LLM: 获取 diagnosisName
+    end
+    B->>DB: 写回 totalScore / riskLevel / assessmentResult
+    B-->>F: 评估完成
+```
+
+### 单轮对话详细处理流程
+
+一轮对话内部的完整处理链：LLM 解析 → 澄清判断 → 强制补底（或跳过）→ 合并数据 → 状态机推进 → 生成下轮提问。
+
+```mermaid
+flowchart TD
+    A["患者发送消息"]
+    B["确定当前目标字段"]
+    C["调用通义千问"]
+    D["LLM 返回 JSON"]
+    E{"delta 包含目标字段?"}
+    CL{"need_clarify 且\nclarify_question 非空?"}
+    G["合并 delta → currentData"]
+    F["强制补底逻辑"]
+    F1{"回答长度与关键词"}
+    F2["≤10 字：直接赋值"]
+    F3["含否定词：赋值 无/正常"]
+    F4["其他：用原话赋值"]
+    SK["跳过补底，等待澄清"]
+    H["状态机推进"]
+    I{"必填字段已填完?"}
+    J{"need_clarify?"}
+    J2{"AI assistant_question\n针对下一字段?"}
+    K["返回 信息已基本完整"]
+    L["采用 clarify_question 追问"]
+    L2["采用 AI 生成的自然提问"]
+    M["模板生成提问"]
+    N["返回前端"]
+
+    A --> B --> C --> D --> E
+    E -->|是| G
+    E -->|否| CL
+    CL -->|是| SK --> L --> N
+    CL -->|否| F --> F1
+    F1 -->|≤10 字| F2 --> G
+    F1 -->|含否定词| F3 --> G
+    F1 -->|其他| F4 --> G
+    G --> H --> I
+    I -->|是| K --> N
+    I -->|否| J
+    J -->|是| L --> N
+    J -->|否| J2
+    J2 -->|是| L2 --> N
+    J2 -->|否| M --> N
+
+    classDef llm fill:#f3e5f5,stroke:#7b1fa2
+    classDef clarify fill:#fff9c4,stroke:#f9a825
+    classDef fallback fill:#fce4ec,stroke:#c62828
+    classDef merge fill:#e8f5e9,stroke:#2e7d32
+    class C,D llm
+    class CL,L,SK clarify
+    class F,F1,F2,F3,F4 fallback
+    class G,H merge
+```
+
+### 规则引擎执行管线（executeAllRules）
+
+按固定顺序执行四类规则：ABNORMAL → SCORE → RISK → CALCULATE，规则通过 Nashorn 执行 `${fieldCode}` 变量替换后的 JavaScript 表达式。
+
+```mermaid
+flowchart TD
+    IN["输入 templateId + assessmentData"]
+
+    subgraph P1["① 异常检测 · ABNORMAL"]
+        A1["遍历 ABNORMAL 规则"]
+    end
+
+    subgraph P2["② 量表计算 · SCORE"]
+        S1["初始化 totalScore = 0"]
+        S2["遍历 SCORE 规则，累加 totalScore"]
+        S1 --> S2
+    end
+
+    subgraph P3["③ 风险分级 · RISK"]
+        R1["将 totalScore 注入 ctx"]
+        R2["遍历 RISK 规则，匹配风险等级"]
+        R1 --> R2
+    end
+
+    subgraph P4["④ 衍生计算 · CALCULATE"]
+        C1["遍历 CALCULATE 规则，存入 calculationResult"]
+    end
+
+    OUT["输出 totalScore · riskLevel · riskTips · assessmentResult"]
+
+    IN --> A1
+    A1 --> S1
+    S2 --> R1
+    R2 --> C1
+    C1 --> OUT
+
+    classDef abnormal fill:#fff9c4,stroke:#f9a825
+    classDef score fill:#e3f2fd,stroke:#1565c0
+    classDef risk fill:#fce4ec,stroke:#c62828
+    classDef calc fill:#f3e5f5,stroke:#7b1fa2
+    class A1 abnormal
+    class S1,S2 score
+    class R1,R2 risk
+    class C1 calc
+```
+
+> 更多核心数据流图详见 [docs/core-data-flows.md](docs/core-data-flows.md)。
+
+---
+
 ## 重要功能截图
 
 | 功能 | 截图 |
@@ -168,148 +449,7 @@
 
 ---
 
-
-## 系统架构图
-
-系统采用前后端分离架构，前端通过 REST API 与后端交互，后端连接 MySQL、Redis 及外部 Qwen 大模型服务。
-
-```mermaid
-flowchart TB
-    subgraph 用户端
-        Browser[浏览器]
-    end
-
-    subgraph 前端层["前端 (Vue 3 + Vite)"]
-        Vue[Vue 3 应用]
-        Router[Vue Router]
-        Pinia[Pinia 状态]
-        Element[Element Plus]
-        Vue --> Router
-        Vue --> Pinia
-        Vue --> Element
-    end
-
-    subgraph 后端层["后端 (Spring Boot)"]
-        Controller[Controller 层]
-        Service[Service 层]
-        Mapper[Mapper 层]
-        AOP[AOP 日志/鉴权]
-        Controller --> Service
-        Service --> Mapper
-        AOP -.-> Controller
-    end
-
-    subgraph 数据层["数据与外部服务"]
-        MySQL[(MySQL 8)]
-        Redis[(Redis)]
-        Qwen[Qwen 大模型 API]
-    end
-
-    Browser <-->|HTTP/HTTPS| Vue
-    Vue <-->|REST API /api/*| Controller
-    Mapper <-->|MyBatis-Plus| MySQL
-    Service <-->|Refresh Token / Sa-Token| Redis
-    Service -->|诊疗建议/模板推荐/对话评估| Qwen
-```
-
-> 更多架构图与工作流程图详见 [docs/diagrams.md](docs/diagrams.md)。
-
-### 架构说明
-
-
-| 层级  | 组件                          | 职责                           |
-| --- | --------------------------- | ---------------------------- |
-| 用户端 | 浏览器                         | 访问前端页面，发起请求                  |
-| 前端层 | Vue 3 + Vite + Element Plus | 页面渲染、路由、状态管理、接口调用            |
-| 后端层 | Spring Boot + MyBatis-Plus  | REST API、业务逻辑、数据持久化、鉴权与日志    |
-| 数据层 | MySQL                       | 业务数据存储                       |
-| 数据层 | Redis                       | Refresh Token、Sa-Token 会话持久化 |
-| 数据层 | Qwen API                    | AI 诊疗建议、对话式评估、模板推荐           |
-
-
-## 核心工作流程
-
-### 1. 患者评估与诊断确认流程
-
-从患者建档到评估完成、AI 诊断回填及医生确认的完整流程。
-
-```mermaid
-flowchart TD
-    A[患者建档] --> B[选择患者与模板]
-    B --> C{评估模式}
-    C -->|表单模式| D[填写评估表单]
-    C -->|对话模式| E[AI 对话式采集]
-    D --> F[提交评估]
-    E --> F
-    F --> G[规则/AI 计算评估结果]
-    G --> H[AI 产出 diagnosisName]
-    H --> I{诊断字典匹配}
-    I -->|匹配成功| J[自动回填患者当前诊断]
-    I -->|未匹配| K[高亮 AI 建议诊断]
-    J --> L[医生可确认/修正]
-    K --> M[一键加入诊断字典并采用]
-    M --> J
-    L --> N[完成]
-```
-
-### 2. 诊断字典与 AI 联动流程
-
-AI 建议诊断与诊断字典的匹配、回填及一键加入逻辑。
-
-```mermaid
-flowchart LR
-    subgraph 评估完成
-        A1[评估提交] --> A2[AI 计算]
-        A2 --> A3[产出 diagnosisName]
-    end
-
-    subgraph 自动匹配
-        A3 --> B1{科室诊断字典}
-        B1 -->|精确/模糊匹配| B2[匹配成功]
-        B1 -->|无匹配| B3[未匹配]
-        B2 --> B4[更新 patient.diagnosis_id]
-    end
-
-    subgraph 医生操作
-        B3 --> C1[诊断详情页高亮提示]
-        C1 --> C2[点击 加入诊断字典并采用]
-        C2 --> C3[新建诊断字典项]
-        C3 --> B4
-    end
-```
-
-### 3. 登录与会话续期流程
-
-```mermaid
-sequenceDiagram
-    participant U as 用户
-    participant F as 前端
-    participant B as 后端
-    participant R as Redis
-
-    U->>F: 输入账号密码
-    F->>B: POST /user/login
-    B->>B: 校验验证码/限流
-    B->>B: 校验密码
-    B->>R: 存储 Refresh Token
-    B-->>F: Access Token + Set-Cookie
-    F->>F: 存储 Token，跳转首页
-
-    loop 后续请求
-        F->>B: Authorization: Bearer {token}
-        B->>B: 校验 Access Token
-        alt Token 有效
-            B-->>F: 正常响应
-        else Token 过期 401
-            F->>B: POST /user/refresh (带 Cookie)
-            B->>R: 校验 Refresh Token
-            B-->>F: 新 Access Token
-            F->>B: 重试原请求
-        end
-    end
-```
-
-> 核心数据流图（评估流程、规则引擎、AI 能力、安全机制等 10 张详细图）详见 [docs/core-data-flows.md](docs/core-data-flows.md)。
+> 更多架构图详见 [docs/diagrams.md](docs/diagrams.md)。
 
 ## 系统角色
 
