@@ -45,7 +45,6 @@ public class AssessmentTemplateController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String templateName,
-            @RequestParam(required = false) String category,
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long departmentId) {
         Page<AssessmentTemplate> page = new Page<>(current, size);
@@ -60,9 +59,6 @@ public class AssessmentTemplateController {
         }
         if (templateName != null && !templateName.isEmpty()) {
             wrapper.like(AssessmentTemplate::getTemplateName, templateName);
-        }
-        if (category != null && !category.isEmpty()) {
-            wrapper.eq(AssessmentTemplate::getCategory, category);
         }
         if (status != null) {
             wrapper.eq(AssessmentTemplate::getStatus, status);

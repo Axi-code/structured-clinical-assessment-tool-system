@@ -194,7 +194,6 @@ public class ReportServiceImpl implements ReportService {
             
             addTableRow(recordTable, "记录编号", record.getRecordNo(), normalFont);
             addTableRow(recordTable, "评估模板", assessmentTemplate != null ? assessmentTemplate.getTemplateName() : "", normalFont);
-            addTableRow(recordTable, "评估类别", assessmentTemplate != null ? assessmentTemplate.getCategory() : "", normalFont);
             addTableRow(recordTable, "评估时间", record.getCreateTime() != null ? record.getCreateTime().format(DATE_FORMATTER) : "", normalFont);
             addTableRow(recordTable, "评估人", record.getAssessorName(), normalFont);
             String recordDeptName = record.getDepartmentId() != null && departmentService.getById(record.getDepartmentId()) != null
@@ -318,18 +317,17 @@ public class ReportServiceImpl implements ReportService {
             
             // 评估记录信息
             addWordSectionHeader(document, "二、评估记录信息");
-            XWPFTable recordTable = document.createTable(7, 4);
+            XWPFTable recordTable = document.createTable(6, 4);
             recordTable.setWidth("100%");
             
             setWordTableRow(recordTable, 0, "记录编号", record.getRecordNo());
             setWordTableRow(recordTable, 1, "评估模板", assessmentTemplate != null ? assessmentTemplate.getTemplateName() : "");
-            setWordTableRow(recordTable, 2, "评估类别", assessmentTemplate != null ? assessmentTemplate.getCategory() : "");
-            setWordTableRow(recordTable, 3, "评估时间", record.getCreateTime() != null ? record.getCreateTime().format(DATE_FORMATTER) : "");
-            setWordTableRow(recordTable, 4, "评估人", record.getAssessorName());
+            setWordTableRow(recordTable, 2, "评估时间", record.getCreateTime() != null ? record.getCreateTime().format(DATE_FORMATTER) : "");
+            setWordTableRow(recordTable, 3, "评估人", record.getAssessorName());
             String wordRecordDept = record.getDepartmentId() != null && departmentService.getById(record.getDepartmentId()) != null
                     ? departmentService.getById(record.getDepartmentId()).getName() : "";
-            setWordTableRow(recordTable, 5, "评估科室", wordRecordDept);
-            setWordTableRow(recordTable, 6, "状态", record.getStatus() == 1 ? "已完成" : "草稿");
+            setWordTableRow(recordTable, 4, "评估科室", wordRecordDept);
+            setWordTableRow(recordTable, 5, "状态", record.getStatus() == 1 ? "已完成" : "草稿");
             
             // 评估数据详情
             addWordSectionHeader(document, "三、评估数据详情");

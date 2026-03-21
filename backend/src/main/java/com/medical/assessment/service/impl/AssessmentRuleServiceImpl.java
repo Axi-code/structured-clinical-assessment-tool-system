@@ -167,6 +167,69 @@ public class AssessmentRuleServiceImpl extends ServiceImpl<AssessmentRuleMapper,
         return riskResult;
     }
     
+    /**
+     * 按总分占理论分值区间的百分比自动计算风险等级
+     * 百分比 = (总分 - 最低分) / (最高分 - 最低分) * 100
+     * 0-33% 低风险，33-66% 中风险，66-100% 高风险
+     */
+    private Map<String, Object> calculateRiskByPercentage(Long templateId, Double totalScore) {
+        Map<String, Object> result = new HashMap<>();
+        if (totalScore == null) {
+            result.put("riskLevel", "低风险");
+            result.put("riskTips", "");
+            return result;
+        }
+        double minScore = 0;
+        double maxScore = 10; // 默认区间，避免除零
+        com.medical.assessment.entity.AssessmentTemplate template = templateService.getById(templateId);
+        if (template != null) {
+            if (template.getMinScore() != null) {
+                minScore = template.getMinScore().doubleValue();
+            }
+            if (template.getMaxScore() != null && template.getMaxScore().doubleValue() > minScore) {
+                maxScore = template.getMaxScore().doubleValue();
+            }
+        }
+        // 若模板未配置分值区间，从评分规则推导
+        if (maxScore <= minScore) {
+            Map<String, Object> range = calculateScoreRange(templateId);
+            double rMin = ((Number) range.getOrDefault("minScore", 0)).doubleValue();
+            double rMax = ((Number) range.getOrDefault("maxScore", 0)).doubleValue();
+            if (rMax > rMin) {
+                minScore = rMin;
+                maxScore = rMax;
+            }
+        }
+        // 兜底：当理论最高分远高于实际得分时（如 2/20），说明量表题目多但用户只填了部分，
+        // 此时以实际得分为有效上限，得分即视为高占比，避免误判为低风险
+        double effectiveMax = maxScore;
+        if (totalScore > 0 && maxScore > totalScore * 2) {
+            effectiveMax = totalScore;
+        }
+        double rangeSpan = effectiveMax - minScore;
+        double percentage;
+        if (rangeSpan <= 0) {
+            percentage = totalScore > minScore ? 100 : 0;
+        } else {
+            percentage = Math.max(0, Math.min(100, (totalScore - minScore) / rangeSpan * 100));
+        }
+        String riskLevel;
+        String riskTip;
+        if (percentage < 33) {
+            riskLevel = "低风险";
+            riskTip = "暂无明显风险，建议常规随访";
+        } else if (percentage < 66) {
+            riskLevel = "中风险";
+            riskTip = "建议进一步检查以明确病因";
+        } else {
+            riskLevel = "高风险";
+            riskTip = "建议尽快就医，采取针对性治疗措施";
+        }
+        result.put("riskLevel", riskLevel);
+        result.put("riskTips", riskTip);
+        return result;
+    }
+    
     @Override
     public Map<String, Object> executeCalculation(Long templateId, Map<String, Object> assessmentData) {
         List<AssessmentRule> rules = getRulesByTemplateId(templateId);
@@ -220,8 +283,8 @@ public class AssessmentRuleServiceImpl extends ServiceImpl<AssessmentRuleMapper,
         ctx.put("totalScore", totalScore);
         ctx.putIfAbsent("score", 0);
         
-        // 计算风险（风险等级由 totalScore 决定，RISK 规则根据总分区间匹配）
-        Map<String, Object> riskResult = calculateRisk(templateId, ctx);
+        // 风险等级按总分占理论最高分的百分比自动计算（优先于 RISK 规则）
+        Map<String, Object> riskResult = calculateRiskByPercentage(templateId, totalScore);
         result.putAll(riskResult);
         
         // 执行计算规则
@@ -753,7 +816,7 @@ public class AssessmentRuleServiceImpl extends ServiceImpl<AssessmentRuleMapper,
         template.setMaxScore(java.math.BigDecimal.valueOf(maxScore));
 
         com.alibaba.fastjson2.JSONObject content = new com.alibaba.fastjson2.JSONObject();
-        content.put("category", template.getCategory());
+        content.put("templateName", template.getTemplateName());
         content.put("description", template.getDescription() != null ? template.getDescription() : "");
 
         com.alibaba.fastjson2.JSONArray fieldsArr = new com.alibaba.fastjson2.JSONArray();

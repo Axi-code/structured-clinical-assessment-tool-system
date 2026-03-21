@@ -62,7 +62,16 @@
               :key="item.id"
               :label="`${item.name} (${item.patientNo})`"
               :value="item.id"
-            />
+              :disabled="!canUsePatient(item)"
+            >
+              <div class="option-with-tag">
+                <span>{{ item.name }} ({{ item.patientNo }})</span>
+                <span v-if="item.departmentName" class="option-dept">{{ item.departmentName }}</span>
+                <el-tag :type="canUsePatient(item) ? 'success' : 'info'" size="small" class="option-tag">
+                  {{ canUsePatient(item) ? '可用' : '不可用（非本科室）' }}
+                </el-tag>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         
@@ -81,7 +90,14 @@
               :key="item.id"
               :label="item.templateName"
               :value="item.id"
-            />
+            >
+              <div class="option-with-tag">
+                <span>{{ item.templateName }}</span>
+                <el-tag type="success" size="small" class="option-tag">
+                  {{ userStore.isAdmin ? '全科室可用' : '本科室可用' }}
+                </el-tag>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
 
@@ -98,12 +114,6 @@
           </el-button>
         </el-form-item>
 
-        <el-form-item label="辅助功能" v-if="!recordId && assessmentMode !== 'CHAT_AUTO'">
-          <el-button link type="primary" @click="handleRecommendTemplate">
-            AI推荐最接近模板
-          </el-button>
-        </el-form-item>
-        
         <!-- 实时计算结果 -->
         <el-card v-if="fields.length > 0 && calculationResult" class="result-card" style="margin-bottom: 20px">
           <template #header>
@@ -330,6 +340,15 @@ const conversationCompletion = ref(0)
 const conversationMissingFields = ref([])
 const conversationNeedClarify = ref(false)
 const submitError = ref('')
+
+// 判断当前用户是否可使用该患者（本科室或管理员）
+const canUsePatient = (patient) => {
+  if (!patient) return false
+  if (userStore.isAdmin) return true
+  const userDeptId = userStore.userInfo?.departmentId
+  if (!userDeptId) return false
+  return patient.departmentId === userDeptId
+}
 
 const searchPatients = async (query) => {
   if (query) {
@@ -587,29 +606,6 @@ const handleFinalizeConversation = async () => {
     ElMessage.error(msg)
   } finally {
     submitting.value = false
-  }
-}
-
-const handleRecommendTemplate = async () => {
-  try {
-    const { value } = await ElMessageBox.prompt('请输入患者主要症状描述', 'AI推荐模板', {
-      confirmButtonText: '推荐',
-      cancelButtonText: '取消',
-      inputPlaceholder: '例如：近两周情绪低落、失眠、兴趣下降',
-      inputValidator: (v) => !!(v && v.trim()) || '请输入症状描述'
-    })
-    const res = await assessmentConversationApi.recommendTemplate({ symptomText: value })
-    if (res.data.templateId) {
-      form.templateId = res.data.templateId
-      await handleTemplateChange()
-      ElMessage.success(`已推荐模板：${res.data.templateName || res.data.templateId}`)
-    } else {
-      ElMessage.warning('未找到匹配模板，请手动选择')
-    }
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '模板推荐失败')
-    }
   }
 }
 
@@ -1062,6 +1058,22 @@ const handleCopySuggestion = () => {
   margin-top: 6px;
   color: #909399;
   font-size: 13px;
+}
+
+.option-with-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.option-dept {
+  font-size: 12px;
+  color: #909399;
+}
+
+.option-tag {
+  margin-left: auto;
 }
 </style>
 

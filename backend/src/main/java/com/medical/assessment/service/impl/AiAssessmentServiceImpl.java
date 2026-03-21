@@ -108,7 +108,6 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
 
         Map<String, Object> result = new HashMap<>();
         result.put("templateName", normalized.getString("templateName"));
-        result.put("category", normalized.getString("category"));
         result.put("description", normalized.getString("description"));
         result.put("fields", normalized.getJSONArray("fields"));
         result.put("scoringRules", normalized.getJSONArray("scoringRules"));
@@ -204,7 +203,6 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
                 + "JSON schema:\n"
                 + "{\n"
                 + "  \"templateName\": \"string\",\n"
-                + "  \"category\": \"string\",\n"
                 + "  \"description\": \"string\",\n"
                 + "  \"fields\": [\n"
                 + "    {\n"
@@ -259,9 +257,6 @@ public class AiAssessmentServiceImpl implements AiAssessmentService {
             templateName = templateName.substring(0, 50);
         }
         result.put("templateName", templateName);
-
-        String category = safe(raw != null ? raw.getString("category") : null);
-        result.put("category", category.isEmpty() ? "AI自动生成" : category);
 
         String description = safe(raw != null ? raw.getString("description") : null);
         if (description.isEmpty()) {

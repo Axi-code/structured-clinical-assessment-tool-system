@@ -18,9 +18,8 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 @TableName("assessment_template")
 public class AssessmentTemplate extends BaseEntity {
-    private String templateName; // 模板名称
+    private String templateName; // 模板名称（原评估类别功能已合并至此）
     private String templateCode; // 模板编码
-    private String category; // 评估类别
     private String description; // 描述
     private String templateContent; // 模板内容(JSON格式)
     private Integer version; // 版本号

@@ -42,7 +42,8 @@ export const useUserStore = defineStore('user', {
         username: data.username,
         realName: data.realName,
         role: data.role,
-        department: data.department
+        department: data.department,
+        departmentId: data.departmentId
       } : null
     },
 

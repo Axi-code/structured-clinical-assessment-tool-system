@@ -67,7 +67,6 @@ public class AssessmentConversationController {
         );
 
         String templateName = String.valueOf(templateDraft.get("templateName"));
-        String category = String.valueOf(templateDraft.get("category"));
         String description = String.valueOf(templateDraft.get("description"));
         List<Map<String, Object>> fieldsDraft = castListMap(templateDraft.get("fields"));
         if (fieldsDraft.isEmpty()) {
@@ -75,7 +74,7 @@ public class AssessmentConversationController {
         }
 
         com.alibaba.fastjson2.JSONObject templateContentJson = new com.alibaba.fastjson2.JSONObject();
-        templateContentJson.put("category", category);
+        templateContentJson.put("templateName", templateName);
         templateContentJson.put("description", description);
         templateContentJson.put("fields", templateDraft.get("fields"));
         templateContentJson.put("scoringRules", templateDraft.get("scoringRules"));
@@ -87,7 +86,6 @@ public class AssessmentConversationController {
         AssessmentTemplate template = new AssessmentTemplate();
         template.setTemplateName(templateName);
         template.setTemplateCode("AI_" + System.currentTimeMillis());
-        template.setCategory(category);
         template.setDescription(description);
         template.setTemplateContent(templateContentJson.toJSONString());
         template.setVersion(1);
@@ -131,7 +129,6 @@ public class AssessmentConversationController {
         Map<String, Object> resp = new HashMap<>();
         resp.put("templateId", template.getId());
         resp.put("templateName", template.getTemplateName());
-        resp.put("category", template.getCategory());
         resp.put("description", template.getDescription());
         resp.put("fields", savedFields);
         return Result.success(resp);
@@ -529,7 +526,6 @@ public class AssessmentConversationController {
         for (AssessmentTemplate t : templates) {
             int score = 0;
             score += tokenMatchScore(text, t.getTemplateName(), 5);
-            score += tokenMatchScore(text, t.getCategory(), 3);
             score += tokenMatchScore(text, t.getDescription(), 2);
             if (score > bestScore) {
                 bestScore = score;

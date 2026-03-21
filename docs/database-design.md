@@ -153,9 +153,8 @@
 核心字段：
 
 - `id`：主键
-- `template_name`：模板名称
+- `template_name`：模板名称（含原评估类别语义）
 - `template_code`：模板编码
-- `category`：评估类别
 - `template_content`：模板 JSON 内容
 - `version`：版本号
 - `status`：启停状态

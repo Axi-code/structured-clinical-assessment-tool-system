@@ -24,10 +24,6 @@ public class AssessmentTemplateCreateDTO {
     @Size(max = 100, message = "模板编码长度不能超过100个字符")
     private String templateCode;
 
-    @NotBlank(message = "评估类别不能为空")
-    @Size(max = 100, message = "评估类别长度不能超过100个字符")
-    private String category;
-
     private String description;
 
     private String templateContent;

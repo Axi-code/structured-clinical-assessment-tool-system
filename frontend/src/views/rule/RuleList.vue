@@ -37,16 +37,6 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <el-form-item label="规则类型">
-              <el-select v-model="searchForm.ruleType" placeholder="请选择规则类型" clearable teleported style="width: 100%">
-                <el-option label="评分规则" value="SCORE" />
-                <el-option label="风险规则" value="RISK" />
-                <el-option label="计算规则" value="CALCULATE" />
-                <el-option label="异常检测" value="ABNORMAL" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8" :lg="6">
             <el-form-item label="状态">
               <el-select v-model="searchForm.status" placeholder="请选择状态" clearable teleported style="width: 100%">
                 <el-option label="启用" :value="1" />
@@ -70,13 +60,6 @@
       <el-table v-else :data="tableData" v-loading="loading" border>
         <el-table-column prop="ruleName" label="规则名称" width="200" />
         <el-table-column prop="ruleCode" label="规则编码" width="150" />
-        <el-table-column prop="ruleType" label="规则类型" width="120">
-          <template #default="scope">
-            <el-tag :type="getRuleTypeTag(scope.row.ruleType)">
-              {{ getRuleTypeText(scope.row.ruleType) }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="templateName" label="所属模板" width="200" />
         <el-table-column prop="priority" label="优先级" width="100" />
         <el-table-column prop="status" label="状态" width="120">
@@ -152,7 +135,6 @@ const templateList = ref([])
 const searchForm = reactive({
   templateId: null,
   ruleName: '',
-  ruleType: '',
   status: null
 })
 
@@ -222,28 +204,6 @@ const loadData = async () => {
   }
 }
 
-// 获取规则类型文本
-const getRuleTypeText = (type) => {
-  const map = {
-    SCORE: '评分规则',
-    RISK: '风险规则',
-    CALCULATE: '计算规则',
-    ABNORMAL: '异常检测'
-  }
-  return map[type] || type
-}
-
-// 获取规则类型标签
-const getRuleTypeTag = (type) => {
-  const map = {
-    SCORE: 'success',
-    RISK: 'danger',
-    CALCULATE: 'warning',
-    ABNORMAL: 'info'
-  }
-  return map[type] || ''
-}
-
 // 查询
 const handleSearch = () => {
   pagination.current = 1
@@ -254,7 +214,6 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.templateId = null
   searchForm.ruleName = ''
-  searchForm.ruleType = ''
   searchForm.status = null
   handleSearch()
 }

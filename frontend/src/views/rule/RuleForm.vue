@@ -35,15 +35,6 @@
           <el-input v-model="formData.ruleCode" placeholder="请输入规则编码（可选）" />
         </el-form-item>
         
-        <el-form-item label="规则类型" prop="ruleType">
-          <el-select v-model="formData.ruleType" placeholder="请选择规则类型" teleported style="width: 100%">
-            <el-option label="评分规则" value="SCORE" />
-            <el-option label="风险规则" value="RISK" />
-            <el-option label="计算规则" value="CALCULATE" />
-            <el-option label="异常检测" value="ABNORMAL" />
-          </el-select>
-        </el-form-item>
-        
         <el-form-item label="优先级" prop="priority">
           <el-input-number v-model="formData.priority" :min="0" :max="999" />
           <span style="margin-left: 10px; color: #909399; font-size: 12px">
@@ -70,8 +61,7 @@
           <template #default>
             <div style="font-size: 12px; line-height: 20px">
               <div><b>字段引用</b>：用 <code>${'{字段编码}'}</code> 或 <code>$字段编码</code>（推荐用上面的“字段插入”）</div>
-              <div><b>SCORE（评分规则）</b>：结果表达式必须返回数字，例如 <code>5</code> / <code>10</code> / <code>Number(${'{age}'}) &gt;= 65 ? 5 : 0</code>；也支持 <code>score += 5</code>（系统会提供 score 初始值 0）</div>
-              <div><b>RISK（风险规则）</b>：可在条件里直接用 <code>totalScore</code>（提交/实时计算时系统会提供总分变量）</div>
+              <div><b>评分规则</b>：结果表达式必须返回数字，例如 <code>5</code> / <code>10</code> / <code>Number(${'{age}'}) &gt;= 65 ? 5 : 0</code>；也支持 <code>score += 5</code>（系统会提供 score 初始值 0）</div>
               <div><b>保存前校验</b>：保存时会先自动跑一次“测试表达式”，有语法/变量错误会阻止保存</div>
             </div>
           </template>
@@ -109,7 +99,7 @@
           />
           <div style="margin-top: 8px; color: #909399; font-size: 12px">
             <div>表达式语法：使用 ${字段编码} 或 $字段编码 引用评估数据字段</div>
-            <div>支持JavaScript表达式，例如：${age} > 18、${score} >= 60 && ${score} <= 80</div>
+            <div>比较用 == 或 ===，例如：${toutong} == "是"、${age} >= 65</div>
             <div>如果为空，则规则始终执行</div>
           </div>
         </el-form-item>
@@ -119,26 +109,29 @@
             v-model="formData.resultExpression"
             type="textarea"
             :rows="3"
-            placeholder="请输入结果表达式，例如：${score} * 0.5"
+            placeholder="条件满足时加的分值，直接填数字即可，例如：2 或 5。复杂计算可用表达式如：Number(${age}) >= 65 ? 5 : 0"
           />
           <div style="margin-top: 8px; color: #909399; font-size: 12px">
-            <div>用于计算规则（CALCULATE）和评分规则（SCORE）</div>
-            <div>评分规则：表达式结果会累加到总分中</div>
-            <div>计算规则：表达式结果会保存到结果中，键名为规则编码</div>
+            <div>用于评分规则（SCORE）：表达式结果会累加到总分中</div>
           </div>
         </el-form-item>
         
         <el-form-item label="规则内容（JSON）" prop="ruleContent">
-          <el-input
-            v-model="formData.ruleContent"
-            type="textarea"
-            :rows="5"
-            placeholder='请输入规则内容（JSON格式），例如：{"score": 10, "riskLevel": "HIGH", "riskTip": "风险提示信息"}'
-          />
+          <div style="display: flex; gap: 8px; align-items: flex-start; width: 100%">
+            <el-input
+              v-model="formData.ruleContent"
+              type="textarea"
+              :rows="4"
+              placeholder='评分规则可留空，系统优先使用上方「结果表达式」计分。如需备用，可点击「一键填入」'
+              style="flex: 1"
+            />
+            <el-button type="primary" plain @click="handleOneClickFill">
+              一键填入
+            </el-button>
+          </div>
           <div style="margin-top: 8px; color: #909399; font-size: 12px">
-            <div>用于风险规则（RISK）和异常检测（ABNORMAL）</div>
-            <div>风险规则示例：{"riskLevel": "HIGH", "riskTip": "高风险提示"}</div>
-            <div>异常检测示例：{"tip": "检测到异常数据"}</div>
+            <div>评分规则：优先使用「结果表达式」计分；若结果表达式为空，则从此处读取 score 字段</div>
+            <div>一键填入：根据「结果表达式」中的数字自动生成 <code>{"score": 分值}</code></div>
           </div>
         </el-form-item>
         
@@ -189,8 +182,7 @@ const formData = reactive({
 
 const rules = {
   templateId: [{ required: true, message: '请选择所属模板', trigger: 'change' }],
-  ruleName: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
-  ruleType: [{ required: true, message: '请选择规则类型', trigger: 'change' }]
+  ruleName: [{ required: true, message: '请输入规则名称', trigger: 'blur' }]
 }
 
 const parseOptions = (optionsStr) => {
@@ -347,6 +339,25 @@ const handleSubmit = async () => {
       submitting.value = false
     }
   })
+}
+
+// 一键填入：根据结果表达式中的数字生成 ruleContent JSON
+const handleOneClickFill = () => {
+  const expr = (formData.resultExpression || '').trim()
+  let score = 0
+  // 尝试从结果表达式中解析数字
+  const numMatch = expr.match(/^\s*(\d+(?:\.\d+)?)\s*$/)
+  if (numMatch) {
+    score = parseFloat(numMatch[1])
+  } else if (expr) {
+    // 表达式不是纯数字，尝试找第一个数字
+    const anyNum = expr.match(/(\d+(?:\.\d+)?)/)
+    if (anyNum) {
+      score = parseFloat(anyNum[1])
+    }
+  }
+  formData.ruleContent = JSON.stringify({ score }, null, 2)
+  ElMessage.success(`已填入 {"score": ${score}}`)
 }
 
 // 测试表达式

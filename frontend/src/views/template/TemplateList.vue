@@ -16,11 +16,6 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <el-form-item label="评估类别">
-              <el-input v-model="searchForm.category" placeholder="请输入评估类别" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8" :lg="6">
             <el-form-item label="状态">
               <el-select v-model="searchForm.status" placeholder="请选择状态" clearable teleported style="width: 100%">
                 <el-option label="启用" :value="1" />
@@ -40,7 +35,6 @@
       <el-table :data="tableData" v-loading="loading" border>
         <el-table-column prop="templateName" label="模板名称" width="200" />
         <el-table-column prop="templateCode" label="模板编码" width="150" />
-        <el-table-column prop="category" label="评估类别" width="150" />
         <el-table-column prop="version" label="版本号" width="100" />
         <el-table-column prop="status" label="状态" width="120">
           <template #default="scope">
@@ -117,7 +111,6 @@ const tableData = ref([])
 
 const searchForm = reactive({
   templateName: '',
-  category: '',
   status: null
 })
 
@@ -152,7 +145,6 @@ const handleSearch = () => {
 const handleReset = () => {
   Object.assign(searchForm, {
     templateName: '',
-    category: '',
     status: null
   })
   handleSearch()

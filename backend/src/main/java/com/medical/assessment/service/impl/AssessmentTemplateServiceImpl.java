@@ -113,7 +113,6 @@ public class AssessmentTemplateServiceImpl extends ServiceImpl<AssessmentTemplat
         AssessmentTemplate template = new AssessmentTemplate();
         template.setTemplateName(isBlank(newVersionDTO.getTemplateName()) ? sourceTemplate.getTemplateName() : newVersionDTO.getTemplateName());
         template.setTemplateCode(templateCode);
-        template.setCategory(isBlank(newVersionDTO.getCategory()) ? sourceTemplate.getCategory() : newVersionDTO.getCategory());
         template.setDescription(isBlank(newVersionDTO.getDescription()) ? sourceTemplate.getDescription() : newVersionDTO.getDescription());
         template.setTemplateContent(sourceTemplate.getTemplateContent());
         template.setVersion(nextVersion);
@@ -176,7 +175,6 @@ public class AssessmentTemplateServiceImpl extends ServiceImpl<AssessmentTemplat
     private void fillTemplate(AssessmentTemplate template, AssessmentTemplateCreateDTO source) {
         template.setTemplateName(source.getTemplateName());
         template.setTemplateCode(source.getTemplateCode());
-        template.setCategory(source.getCategory());
         template.setDescription(source.getDescription());
         template.setTemplateContent(source.getTemplateContent());
         template.setStatus(source.getStatus());

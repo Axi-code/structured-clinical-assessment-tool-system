@@ -22,7 +22,6 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模板名称">{{ templateInfo.templateName }}</el-descriptions-item>
           <el-descriptions-item label="模板编码">{{ templateInfo.templateCode }}</el-descriptions-item>
-          <el-descriptions-item label="评估类别">{{ templateInfo.category }}</el-descriptions-item>
           <el-descriptions-item label="版本号">{{ templateInfo.version }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="templateInfo.status === 1 ? 'success' : 'info'">

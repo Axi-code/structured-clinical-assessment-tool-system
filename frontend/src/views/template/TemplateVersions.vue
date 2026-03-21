@@ -15,7 +15,6 @@
         <el-table :data="versions" border>
           <el-table-column prop="version" label="版本号" width="100" />
           <el-table-column prop="templateName" label="模板名称" width="200" />
-          <el-table-column prop="category" label="评估类别" width="150" />
           <el-table-column prop="status" label="状态" width="120">
             <template #default="scope">
               <el-switch
@@ -72,9 +71,6 @@
         <el-form-item label="模板名称">
           <el-input v-model="newVersionForm.templateName" placeholder="请输入模板名称" />
         </el-form-item>
-        <el-form-item label="评估类别">
-          <el-input v-model="newVersionForm.category" placeholder="请输入评估类别" />
-        </el-form-item>
         <el-form-item label="描述">
           <el-input
             v-model="newVersionForm.description"
@@ -119,7 +115,6 @@ const currentTemplate = ref(null)
 const createVersionVisible = ref(false)
 const newVersionForm = ref({
   templateName: '',
-  category: '',
   description: '',
   remark: ''
 })
@@ -164,7 +159,6 @@ const handleCreateVersion = () => {
   if (currentTemplate.value) {
     newVersionForm.value = {
       templateName: currentTemplate.value.templateName,
-      category: currentTemplate.value.category,
       description: currentTemplate.value.description,
       remark: `基于版本${currentTemplate.value.version}创建`
     }
@@ -175,7 +169,6 @@ const handleCreateVersion = () => {
 const handleCreateFromVersion = (row) => {
   newVersionForm.value = {
     templateName: row.templateName,
-    category: row.category,
     description: row.description,
     remark: `基于版本${row.version}创建`
   }

@@ -97,7 +97,12 @@
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-icon><Avatar /></el-icon>
-              <span class="username">{{ userStore.userInfo?.username }}</span>
+              <div class="user-detail">
+                <span class="username">{{ userStore.userInfo?.username }}</span>
+                <span class="department" v-if="userStore.userInfo?.department || userStore.userInfo?.departmentName">
+                  {{ userStore.userInfo.department || userStore.userInfo.departmentName }}
+                </span>
+              </div>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -464,9 +469,21 @@ onUnmounted(() => {
   color: #4facfe;
 }
 
+.user-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .username {
   font-weight: 500;
   color: #1e293b;
+}
+
+.department {
+  font-size: 12px;
+  color: #64748b;
 }
 
 :deep(.el-dropdown-menu__item) {

@@ -104,7 +104,6 @@ CREATE TABLE `assessment_template` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `template_name` varchar(100) NOT NULL COMMENT '模板名称',
   `template_code` varchar(100) NOT NULL COMMENT '模板编码',
-  `category` varchar(100) DEFAULT NULL COMMENT '评估类别',
   `description` varchar(500) DEFAULT NULL COMMENT '描述',
   `template_content` text COMMENT '模板内容（JSON格式）',
   `version` int NOT NULL DEFAULT 1 COMMENT '版本号',
@@ -118,7 +117,6 @@ CREATE TABLE `assessment_template` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_template_code_version` (`template_code`, `version`),
   KEY `idx_assessment_template_code` (`template_code`),
-  KEY `idx_assessment_template_category` (`category`),
   KEY `idx_assessment_template_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评估模板表';
 
