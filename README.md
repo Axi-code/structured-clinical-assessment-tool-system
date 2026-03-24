@@ -86,30 +86,6 @@ flowchart TD
     L --> N[完成]
 ```
 
-### 诊断字典与 AI 联动流程
-
-```mermaid
-flowchart LR
-    subgraph 评估完成
-        A1[评估提交] --> A2[AI 计算]
-        A2 --> A3[产出 diagnosisName]
-    end
-
-    subgraph 自动匹配
-        A3 --> B1{科室诊断字典}
-        B1 -->|精确/模糊匹配| B2[匹配成功]
-        B1 -->|无匹配| B3[未匹配]
-        B2 --> B4[更新 patient.diagnosis_id]
-    end
-
-    subgraph 医生操作
-        B3 --> C1[诊断详情页高亮提示]
-        C1 --> C2[点击 加入诊断字典并采用]
-        C2 --> C3[新建诊断字典项]
-        C3 --> B4
-    end
-```
-
 ### 登录与会话续期流程
 
 ```mermaid
